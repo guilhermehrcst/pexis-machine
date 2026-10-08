@@ -54,7 +54,7 @@ appearing in a scene where selection, inspection, x-ray, or future annotations c
 
 > This is the M1A map, kept for history. M1A gave the M1 blockout semantic identity without changing the
 > picture. The CPU entry was replaced by the Pexis Compute Module in M1B; see below for the current map.
-> RAM, interconnect and GPU still use their M1A parts.
+> RAM was replaced by the Pexis Memory Module in M1C. Interconnect and the planned GPU retain M1A parts.
 
 ```text
 cpu · compute   (M1A blockout — superseded by M1B)
@@ -141,6 +141,30 @@ adds space no camera can use, so the stage height follows the stage width (`50cq
 instead of stretching to the side rail. Labels are anchored by their bottom edge above the part they name, so they
 never cover it.
 
+## M1C: Pexis Memory Module
+
+M1C replaces the RAM blockout with the procedural, authorial Pexis Memory Module. It retains the
+simulator-facing identity of ram, the C++ linear-memory implementation, and all existing events
+and telemetry. No memory hierarchy, channel, bandwidth, or clock model is added.
+
+Semantic visual structure:
+
+- slot / physical-mount: memory.mount
+- pcb / memory-carrier: memory.carrier
+- dram-packages / illustrative-memory-packages: memory.packages (16 instanced details)
+- contacts / illustrative-connector: memory.contacts (48 instanced nickel details)
+- chassis / industrial-frame: memory.chassis-cap and memory.chassis-rails (4 instances)
+- routing / inert-surface-detail: memory.surface-routing (16 instances)
+- activity-edge / observation-memory-access: memory.activity-edge
+
+These details suggest an industrial cartridge, not simulated DRAM banks or channels. A semantic
+anchor named anchor.fabric-port sits on its mounting edge for a future Pexis Fabric visual
+contract. M1C does not change the existing event-driven CPU/RAM transfer path.
+
+Eight renderables are enforced by a test. Other tests validate part identity, semantic anchors,
+front/back instance placement, visible geometry, and a non-emissive initial activity strip.
+The Compute Module and Memory Module now share a graphite/satin/nickel vocabulary.
+
 ## Future asset adapter
 
 If a later component uses GLB, its loader must produce the same `MachineVisualComponent` contract. The rest of the
@@ -164,7 +188,7 @@ the semantic layer independent from renderer policy.
 
 ## Next gate
 
-M1B (Pexis Compute Module) is integrated and was refined in M1B.1. The next milestone is **M1C**: the next
-authorial component on this contract, starting with the Pexis Memory Module and the Fabric's role as the visual
-connection between modules. RAM still uses its M1A blockout (including gold contacts that no longer match the
-Compute Module's nickel finish). M1C must not move memory behavior into the visual layer either.
+M1C introduces the Pexis Memory Module alongside M1B.1 Compute. After M1C validation and merge,
+the next focused milestone is M1D: Pexis Fabric as an authorial, event-driven visual component
+connecting simulated CPU and RAM. Unimplemented GPU links must remain visibly planned, never
+presented as active hardware.

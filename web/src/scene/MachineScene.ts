@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { MachineStatus } from '../machine/types';
 import { buildPexisComputeModule } from './components/PexisComputeModule';
+import { buildPexisMemoryModule } from './components/PexisMemoryModule';
 import { NO_INSETS, boxCorners, fitPointsToView, type FramingInsets } from './framing';
 import { boxGeometry, roundedBoxGeometry } from './primitives';
 import {
@@ -352,75 +353,25 @@ export class MachineScene {
   }
 
   #buildRam(): void {
-    const group = new THREE.Group();
-    group.position.copy(RAM_POS);
+    const build = buildPexisMemoryModule();
+    build.component.root.position.copy(RAM_POS);
+    this.#ramGlowMaterial = build.activityMaterial;
+    this.#registerComponent(build.component);
 
-    const slot = new THREE.Mesh(
-      roundedBoxGeometry(2.7, 0.16, 0.34, 2, 0.04),
-      new THREE.MeshStandardMaterial({ color: COLOR.graphite, roughness: 0.6 }),
+    // Same simulator-facing identity, interaction contract and CPU/RAM path.
+    // Only the visual representation changes.
+    this.#addHitTarget(
+      'ram',
+      boxGeometry(build.width + 0.14, build.height + 0.14, build.depth + 0.26),
+      RAM_POS.clone().setY(build.height / 2),
     );
-    slot.position.y = 0.08;
-    slot.castShadow = true;
-    group.add(slot);
-
-    const board = new THREE.Mesh(
-      roundedBoxGeometry(2.5, 0.66, 0.05, 2, 0.015),
-      new THREE.MeshStandardMaterial({ color: COLOR.graphiteSoft, roughness: 0.5, metalness: 0.05 }),
-    );
-    board.position.y = 0.16 + 0.33;
-    board.castShadow = true;
-    group.add(board);
-
-    const chip = boxGeometry(0.24, 0.3, 0.025);
-    const chips = new THREE.InstancedMesh(
-      chip,
-      new THREE.MeshStandardMaterial({ color: COLOR.chip, roughness: 0.45 }),
-      16,
-    );
-    const m = new THREE.Matrix4();
-    for (let i = 0; i < 8; i += 1) {
-      const x = -1.03 + i * 0.295;
-      chips.setMatrixAt(i * 2, m.makeTranslation(x, 0.53, 0.037));
-      chips.setMatrixAt(i * 2 + 1, m.makeTranslation(x, 0.53, -0.037));
-    }
-    chips.castShadow = true;
-    group.add(chips);
-
-    const contacts = new THREE.Mesh(
-      boxGeometry(2.36, 0.05, 0.056),
-      new THREE.MeshStandardMaterial({ color: COLOR.gold, roughness: 0.3, metalness: 0.85 }),
-    );
-    contacts.position.y = 0.185;
-    group.add(contacts);
-
-    // Edge light: shows RAM access (fetch, load, store) reported by the core.
-    this.#ramGlowMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: COLOR.accent,
-      emissiveIntensity: 0,
-      roughness: 0.4,
-    });
-    const edge = new THREE.Mesh(boxGeometry(2.44, 0.018, 0.056), this.#ramGlowMaterial);
-    edge.position.y = 0.825;
-    group.add(edge);
-
-    this.#registerComponent(
-      createVisualComponent<ComponentId>({
-        id: 'ram',
-        kind: 'memory',
-        root: group,
-        parts: [
-          { id: 'slot', role: 'physical-slot', objects: [slot] },
-          { id: 'pcb', role: 'memory-pcb', objects: [board] },
-          { id: 'dram-packages', role: 'memory-devices', objects: [chips] },
-          { id: 'contacts', role: 'electrical-contacts', objects: [contacts] },
-          { id: 'activity-edge', role: 'observation-activity', objects: [edge] },
-        ],
-      }),
-    );
-    this.#addHitTarget('ram', boxGeometry(2.8, 1.0, 0.7), RAM_POS.clone().setY(0.45));
     this.#addFootprint('ram', RAM_POS, 3.0, 0.9);
-    this.#addLabel('ram', 'RAM', this.#options.ramLabel, RAM_POS.clone().setY(0.92));
+    this.#addLabel(
+      'ram',
+      'RAM',
+      this.#options.ramLabel,
+      RAM_POS.clone().add(new THREE.Vector3(0, build.height + 0.08, -build.depth / 2)),
+    );
   }
 
   #buildGpu(): void {

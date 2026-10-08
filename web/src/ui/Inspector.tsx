@@ -67,6 +67,7 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
           ) : null}
           {selected === 'ram' ? (
             <dl>
+              <Row label="Module" value="Pexis Memory" />
               <Row label="Size" value={bytesHuman(client.memorySize)} />
               <Row label="Layout" value="Linear, byte-addressable" />
               <Row label="Loads / stores" value={`${decimal(t.loads)} / ${decimal(t.stores)}`} />
