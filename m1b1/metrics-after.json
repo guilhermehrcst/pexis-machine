@@ -1,0 +1,247 @@
+{
+ "desktop-1440x900": {
+  "stage": {
+   "x": 251,
+   "y": 73,
+   "w": 754,
+   "h": 505
+  },
+  "labels": {
+   "CPU": {
+    "cx": 0.588,
+    "cy": 0.199,
+    "visible": true
+   },
+   "RAM": {
+    "cx": 0.162,
+    "cy": 0.338,
+    "visible": true
+   },
+   "GPU": {
+    "cx": 0.838,
+    "cy": 0.614,
+    "visible": true
+   },
+   "Interconnect": {
+    "cx": 0.537,
+    "cy": 0.537,
+    "visible": true
+   }
+  },
+  "hOverflow": 0,
+  "darkBox": [
+   0.037,
+   0.261,
+   0.686,
+   0.564
+  ],
+  "darkFraction": 0.0564,
+  "lastFrame": {
+   "drawCalls": 30,
+   "triangles": 15516
+  },
+  "gpuObjectsCreated": {
+   "buffers": 87,
+   "programs": 10,
+   "textures": 5
+  },
+  "idleFramesIn1500ms": 0,
+  "errors": []
+ },
+ "tablet-1024x768": {
+  "stage": {
+   "x": 83,
+   "y": 114,
+   "w": 907,
+   "h": 568
+  },
+  "labels": {
+   "CPU": {
+    "cx": 0.584,
+    "cy": 0.19,
+    "visible": true
+   },
+   "RAM": {
+    "cx": 0.158,
+    "cy": 0.335,
+    "visible": true
+   },
+   "GPU": {
+    "cx": 0.836,
+    "cy": 0.631,
+    "visible": true
+   },
+   "Interconnect": {
+    "cx": 0.534,
+    "cy": 0.548,
+    "visible": true
+   }
+  },
+  "hOverflow": 0,
+  "darkBox": [
+   0.035,
+   0.25,
+   0.68,
+   0.57
+  ],
+  "darkFraction": 0.0592,
+  "lastFrame": {
+   "drawCalls": 30,
+   "triangles": 15516
+  },
+  "gpuObjectsCreated": {
+   "buffers": 87,
+   "programs": 10,
+   "textures": 5
+  },
+  "idleFramesIn1500ms": 0,
+  "errors": []
+ },
+ "tablet-1180x820": {
+  "stage": {
+   "x": 83,
+   "y": 78,
+   "w": 721,
+   "h": 489
+  },
+  "labels": {
+   "CPU": {
+    "cx": 0.589,
+    "cy": 0.21,
+    "visible": true
+   },
+   "RAM": {
+    "cx": 0.163,
+    "cy": 0.351,
+    "visible": true
+   },
+   "GPU": {
+    "cx": 0.838,
+    "cy": 0.624,
+    "visible": true
+   },
+   "Interconnect": {
+    "cx": 0.538,
+    "cy": 0.547,
+    "visible": true
+   }
+  },
+  "hOverflow": 0,
+  "darkBox": [
+   0.037,
+   0.275,
+   0.687,
+   0.576
+  ],
+  "darkFraction": 0.056,
+  "lastFrame": {
+   "drawCalls": 30,
+   "triangles": 15516
+  },
+  "gpuObjectsCreated": {
+   "buffers": 87,
+   "programs": 10,
+   "textures": 5
+  },
+  "idleFramesIn1500ms": 0,
+  "errors": []
+ },
+ "tablet-820x1180": {
+  "stage": {
+   "x": 83,
+   "y": 132,
+   "w": 703,
+   "h": 480
+  },
+  "labels": {
+   "CPU": {
+    "cx": 0.59,
+    "cy": 0.211,
+    "visible": true
+   },
+   "RAM": {
+    "cx": 0.163,
+    "cy": 0.352,
+    "visible": true
+   },
+   "GPU": {
+    "cx": 0.838,
+    "cy": 0.623,
+    "visible": true
+   },
+   "Interconnect": {
+    "cx": 0.539,
+    "cy": 0.547,
+    "visible": true
+   }
+  },
+  "hOverflow": 0,
+  "darkBox": [
+   0.038,
+   0.276,
+   0.687,
+   0.576
+  ],
+  "darkFraction": 0.0556,
+  "lastFrame": {
+   "drawCalls": 30,
+   "triangles": 15516
+  },
+  "gpuObjectsCreated": {
+   "buffers": 87,
+   "programs": 10,
+   "textures": 5
+  },
+  "idleFramesIn1500ms": 0,
+  "errors": []
+ },
+ "mobile-390x844": {
+  "stage": {
+   "x": 13,
+   "y": 168,
+   "w": 364,
+   "h": 310
+  },
+  "labels": {
+   "CPU": {
+    "cx": 0.597,
+    "cy": 0.331,
+    "visible": true
+   },
+   "RAM": {
+    "cx": 0.178,
+    "cy": 0.462,
+    "visible": true
+   },
+   "GPU": {
+    "cx": 0.829,
+    "cy": 0.678,
+    "visible": true
+   },
+   "Interconnect": {
+    "cx": 0.544,
+    "cy": 0.616,
+    "visible": true
+   }
+  },
+  "hOverflow": 0,
+  "darkBox": [
+   0.049,
+   0.381,
+   0.695,
+   0.639
+  ],
+  "darkFraction": 0.0449,
+  "lastFrame": {
+   "drawCalls": 30,
+   "triangles": 15516
+  },
+  "gpuObjectsCreated": {
+   "buffers": 87,
+   "programs": 10,
+   "textures": 5
+  },
+  "idleFramesIn1500ms": 0,
+  "errors": []
+ }
+}
