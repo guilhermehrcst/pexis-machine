@@ -7,9 +7,14 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { MachineStatus } from '../machine/types';
+import { boxGeometry, roundedBoxGeometry } from './primitives';
+import {
+  MachineVisualRegistry,
+  createVisualComponent,
+  type MachineVisualComponent,
+} from './semantic';
 import type { ComponentId, StepVisual, Transfer, TransferKind } from './transfers';
 
 export interface MachineSceneOptions {
@@ -82,6 +87,7 @@ export class MachineScene {
   readonly #footprints = new Map<ComponentId, THREE.LineLoop>();
   readonly #labelElements = new Map<ComponentId, HTMLElement>();
   readonly #textures: THREE.Texture[] = [];
+  readonly #components = new MachineVisualRegistry<ComponentId>();
 
   #frame = 0;
   #pointerDown: { x: number; y: number } | null = null;
@@ -234,6 +240,7 @@ export class MachineScene {
     });
     for (const material of materials) material.dispose();
     for (const texture of this.#textures) texture.dispose();
+    this.#components.clear();
     this.#scene.clear();
 
     this.#renderer.dispose();
@@ -264,7 +271,7 @@ export class MachineScene {
 
   #buildPlatform(): void {
     const base = new THREE.Mesh(
-      new RoundedBoxGeometry(9.4, 0.24, 6.0, 4, 0.12),
+      roundedBoxGeometry(9.4, 0.24, 6.0, 4, 0.12),
       new THREE.MeshStandardMaterial({ color: COLOR.platform, roughness: 0.92, metalness: 0 }),
     );
     base.position.y = -0.12;
@@ -272,7 +279,7 @@ export class MachineScene {
     this.#scene.add(base);
 
     const plinth = new THREE.Mesh(
-      new RoundedBoxGeometry(9.0, 0.18, 5.6, 4, 0.09),
+      roundedBoxGeometry(9.0, 0.18, 5.6, 4, 0.09),
       new THREE.MeshStandardMaterial({ color: COLOR.platformEdge, roughness: 1 }),
     );
     plinth.position.y = -0.3;
@@ -298,7 +305,7 @@ export class MachineScene {
     group.position.copy(CPU_POS);
 
     const substrate = new THREE.Mesh(
-      new RoundedBoxGeometry(2.0, 0.14, 2.0, 3, 0.05),
+      roundedBoxGeometry(2.0, 0.14, 2.0, 3, 0.05),
       new THREE.MeshStandardMaterial({ color: COLOR.graphite, roughness: 0.55, metalness: 0.1 }),
     );
     substrate.position.y = 0.07;
@@ -307,7 +314,7 @@ export class MachineScene {
     group.add(substrate);
 
     // Fine contact pads around the package edge.
-    const pad = new THREE.BoxGeometry(0.06, 0.012, 0.12);
+    const pad = boxGeometry(0.06, 0.012, 0.12);
     const padMaterial = new THREE.MeshStandardMaterial({ color: COLOR.gold, roughness: 0.35, metalness: 0.8 });
     const pads = new THREE.InstancedMesh(pad, padMaterial, 4 * 13);
     const m = new THREE.Matrix4();
@@ -340,15 +347,27 @@ export class MachineScene {
     group.add(ring);
 
     const spreader = new THREE.Mesh(
-      new RoundedBoxGeometry(1.22, 0.1, 1.22, 3, 0.06),
+      roundedBoxGeometry(1.22, 0.1, 1.22, 3, 0.06),
       new THREE.MeshStandardMaterial({ color: COLOR.spreader, roughness: 0.32, metalness: 0.75 }),
     );
     spreader.position.y = 0.19;
     spreader.castShadow = true;
     group.add(spreader);
 
-    this.#scene.add(group);
-    this.#addHitTarget('cpu', new THREE.BoxGeometry(2.1, 0.5, 2.1), CPU_POS.clone().setY(0.2));
+    this.#registerComponent(
+      createVisualComponent<ComponentId>({
+        id: 'cpu',
+        kind: 'compute',
+        root: group,
+        parts: [
+          { id: 'substrate', role: 'package-substrate', objects: [substrate] },
+          { id: 'contacts', role: 'electrical-contacts', objects: [pads] },
+          { id: 'activity-ring', role: 'observation-activity', objects: [ring] },
+          { id: 'heat-spreader', role: 'package-cover', objects: [spreader] },
+        ],
+      }),
+    );
+    this.#addHitTarget('cpu', boxGeometry(2.1, 0.5, 2.1), CPU_POS.clone().setY(0.2));
     this.#addFootprint('cpu', CPU_POS, 2.3, 2.3);
     this.#addLabel('cpu', 'CPU', 'Functional core', CPU_POS.clone().setY(0.55));
   }
@@ -358,7 +377,7 @@ export class MachineScene {
     group.position.copy(RAM_POS);
 
     const slot = new THREE.Mesh(
-      new RoundedBoxGeometry(2.7, 0.16, 0.34, 2, 0.04),
+      roundedBoxGeometry(2.7, 0.16, 0.34, 2, 0.04),
       new THREE.MeshStandardMaterial({ color: COLOR.graphite, roughness: 0.6 }),
     );
     slot.position.y = 0.08;
@@ -366,14 +385,14 @@ export class MachineScene {
     group.add(slot);
 
     const board = new THREE.Mesh(
-      new RoundedBoxGeometry(2.5, 0.66, 0.05, 2, 0.015),
+      roundedBoxGeometry(2.5, 0.66, 0.05, 2, 0.015),
       new THREE.MeshStandardMaterial({ color: COLOR.graphiteSoft, roughness: 0.5, metalness: 0.05 }),
     );
     board.position.y = 0.16 + 0.33;
     board.castShadow = true;
     group.add(board);
 
-    const chip = new THREE.BoxGeometry(0.24, 0.3, 0.025);
+    const chip = boxGeometry(0.24, 0.3, 0.025);
     const chips = new THREE.InstancedMesh(
       chip,
       new THREE.MeshStandardMaterial({ color: COLOR.chip, roughness: 0.45 }),
@@ -389,7 +408,7 @@ export class MachineScene {
     group.add(chips);
 
     const contacts = new THREE.Mesh(
-      new THREE.BoxGeometry(2.36, 0.05, 0.056),
+      boxGeometry(2.36, 0.05, 0.056),
       new THREE.MeshStandardMaterial({ color: COLOR.gold, roughness: 0.3, metalness: 0.85 }),
     );
     contacts.position.y = 0.185;
@@ -402,20 +421,34 @@ export class MachineScene {
       emissiveIntensity: 0,
       roughness: 0.4,
     });
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.018, 0.056), this.#ramGlowMaterial);
+    const edge = new THREE.Mesh(boxGeometry(2.44, 0.018, 0.056), this.#ramGlowMaterial);
     edge.position.y = 0.825;
     group.add(edge);
 
-    this.#scene.add(group);
-    this.#addHitTarget('ram', new THREE.BoxGeometry(2.8, 1.0, 0.7), RAM_POS.clone().setY(0.45));
+    this.#registerComponent(
+      createVisualComponent<ComponentId>({
+        id: 'ram',
+        kind: 'memory',
+        root: group,
+        parts: [
+          { id: 'slot', role: 'physical-slot', objects: [slot] },
+          { id: 'pcb', role: 'memory-pcb', objects: [board] },
+          { id: 'dram-packages', role: 'memory-devices', objects: [chips] },
+          { id: 'contacts', role: 'electrical-contacts', objects: [contacts] },
+          { id: 'activity-edge', role: 'observation-activity', objects: [edge] },
+        ],
+      }),
+    );
+    this.#addHitTarget('ram', boxGeometry(2.8, 1.0, 0.7), RAM_POS.clone().setY(0.45));
     this.#addFootprint('ram', RAM_POS, 3.0, 0.9);
     this.#addLabel('ram', 'RAM', this.#options.ramLabel, RAM_POS.clone().setY(1.12));
   }
 
   #buildGpu(): void {
+    const group = new THREE.Group();
     // GPU does not exist in the simulator. It is drawn as an empty, inert
     // outline so the planned topology is visible without implying activity.
-    const geometry = new RoundedBoxGeometry(2.1, 0.22, 1.6, 3, 0.06);
+    const geometry = roundedBoxGeometry(2.1, 0.22, 1.6, 3, 0.06);
     const shell = new THREE.Mesh(
       geometry,
       new THREE.MeshStandardMaterial({
@@ -427,7 +460,7 @@ export class MachineScene {
       }),
     );
     shell.position.copy(GPU_POS).setY(0.11);
-    this.#scene.add(shell);
+    group.add(shell);
 
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry, 30),
@@ -435,14 +468,29 @@ export class MachineScene {
     );
     edges.computeLineDistances();
     edges.position.copy(shell.position);
-    this.#scene.add(edges);
+    group.add(edges);
 
-    this.#addHitTarget('gpu', new THREE.BoxGeometry(2.2, 0.5, 1.7), GPU_POS.clone().setY(0.2));
+    this.#registerComponent(
+      createVisualComponent<ComponentId>({
+        id: 'gpu',
+        kind: 'graphics',
+        root: group,
+        parts: [
+          { id: 'planned-shell', role: 'planned-placeholder', objects: [shell] },
+          { id: 'planned-outline', role: 'planned-outline', objects: [edges] },
+        ],
+      }),
+    );
+
+    this.#addHitTarget('gpu', boxGeometry(2.2, 0.5, 1.7), GPU_POS.clone().setY(0.2));
     this.#addFootprint('gpu', GPU_POS, 2.4, 1.9);
     this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.55), true);
   }
 
   #buildInterconnect(): void {
+    const group = new THREE.Group();
+    const ramGeometry: THREE.Object3D[] = [];
+    const gpuReservedGeometry: THREE.Object3D[] = [];
     // CPU <-> RAM bus: three parallel lanes; the centre lane carries pulses.
     const traceMaterial = (): THREE.MeshStandardMaterial =>
       new THREE.MeshStandardMaterial({ color: COLOR.trace, roughness: 0.5, emissive: COLOR.accent, emissiveIntensity: 0 });
@@ -452,7 +500,8 @@ export class MachineScene {
       const material = traceMaterial();
       const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 96, offset === 0 ? 0.026 : 0.018, 8), material);
       tube.receiveShadow = true;
-      this.#scene.add(tube);
+      group.add(tube);
+      ramGeometry.push(tube);
       this.#ramLanes.push({ curve, material });
     }
 
@@ -464,12 +513,25 @@ export class MachineScene {
         new THREE.LineDashedMaterial({ color: COLOR.ghostEdge, dashSize: 0.07, gapSize: 0.07 }),
       );
       line.computeLineDistances();
-      this.#scene.add(line);
+      group.add(line);
+      gpuReservedGeometry.push(line);
     }
 
+    this.#registerComponent(
+      createVisualComponent<ComponentId>({
+        id: 'interconnect',
+        kind: 'fabric',
+        root: group,
+        parts: [
+          { id: 'ram-lanes', role: 'active-data-path', objects: ramGeometry },
+          { id: 'gpu-reserved-lanes', role: 'planned-data-path', objects: gpuReservedGeometry },
+        ],
+      }),
+    );
+
     // Hit target along the RAM bus.
-    this.#addHitTarget('interconnect', new THREE.BoxGeometry(1.4, 0.3, 0.5), new THREE.Vector3(-1.05, 0.1, 1.35));
-    this.#addHitTarget('interconnect', new THREE.BoxGeometry(0.5, 0.3, 1.5), new THREE.Vector3(-0.45, 0.1, 0.5));
+    this.#addHitTarget('interconnect', boxGeometry(1.4, 0.3, 0.5), new THREE.Vector3(-1.05, 0.1, 1.35));
+    this.#addHitTarget('interconnect', boxGeometry(0.5, 0.3, 1.5), new THREE.Vector3(-0.45, 0.1, 0.5));
     const mid = this.#ramLanes[1]!.curve.getPointAt(0.5);
     this.#addLabel('interconnect', 'Interconnect', 'CPU ↔ RAM', mid.clone().add(new THREE.Vector3(0.9, 0.15, 0.25)));
   }
@@ -501,6 +563,11 @@ export class MachineScene {
     this.#pulseTagObject = new CSS2DObject(this.#pulseTag);
     this.#pulseTagObject.visible = false;
     this.#scene.add(this.#pulseTagObject);
+  }
+
+  #registerComponent(component: MachineVisualComponent<ComponentId>): void {
+    this.#components.register(component);
+    this.#scene.add(component.root);
   }
 
   #addHitTarget(id: ComponentId, geometry: THREE.BufferGeometry, position: THREE.Vector3): void {

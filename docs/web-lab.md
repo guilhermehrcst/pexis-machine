@@ -35,7 +35,9 @@ React state (`useMachineLab`) holds only the latest snapshot, the decoded progra
 
 `web/src/scene/MachineScene.ts` — procedural geometry (no model files), on-demand rendering (frames only while the
 camera moves, an animation runs, or after resize/state change), DPR capped at 2, `ResizeObserver`, complete
-`dispose()` of geometries, materials, textures, controls and WebGL context.
+`dispose()` of geometries, materials, textures, controls and WebGL context. M1A adds a fail-closed semantic component
+registry (`scene/semantic.ts`) and a small procedural geometry kit (`scene/primitives.ts`); see
+[`visual-architecture.md`](visual-architecture.md).
 
 Transfers come only from `scene/transfers.ts`, which maps events to motion:
 `instruction-fetch` and `memory-read` → RAM → CPU, `memory-write` → CPU → RAM. Register writes, retire, halt and
