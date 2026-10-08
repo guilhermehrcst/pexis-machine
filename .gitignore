@@ -1,0 +1,30 @@
+# Build outputs
+/build/
+/build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+cmake_install.cmake
+Makefile
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.wasm
+
+# Tooling
+.compile_commands.json
+.vscode/
+.idea/
+.DS_Store
+
+# Node / web tooling (future Web Lab)
+node_modules/
+dist/
