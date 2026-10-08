@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: github-pages
@@ -52,6 +50,12 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Verify Pages assets
+        run: |
+          test -f web/dist/index.html
+          grep -q '/pexis-machine/assets/' web/dist/index.html
+          find web/dist/assets -maxdepth 1 -type f -name '*.wasm' -print -quit | grep -q .
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
@@ -62,6 +66,9 @@ jobs:
 
   deploy:
     name: Deploy GitHub Pages
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
