@@ -43,6 +43,10 @@ Transfers come only from `scene/transfers.ts`, which maps events to motion:
 `instruction-fetch` and `memory-read` → RAM → CPU, `memory-write` → CPU → RAM. Register writes, retire, halt and
 fault never move data. The scene animates the most recent step; the timeline records every step.
 
+The camera frames the hardware geometrically (`scene/framing.ts`): it solves the camera distance and target so
+every component and label fits the stage area left free by the HTML overlays, for any viewport and after rotation.
+See `docs/visual-architecture.md`.
+
 The GPU is drawn as an inert dashed outline labeled *Planned · M4*. It has no state, metrics, or activity, and the
 GPU Vector Add experiment is shown disabled.
 
