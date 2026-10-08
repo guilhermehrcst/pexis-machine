@@ -486,6 +486,13 @@ void test_disassembly_text() {
     expect(listing[0].status == pexis::machine::DecodeStatus::InvalidOpcode, "invalid opcode is flagged");
     expect(listing[0].text == ".byte 0xAB", "invalid opcode is shown as raw data");
 
+    // A decode never reaches past the requested range, even when RAM beyond it is readable.
+    expect(machine.load_program(pexis::machine::ProgramBuilder{}.mov_imm64(0, 40).bytes()), "MOV should load");
+    listing = pexis::machine::disassemble(machine.memory(), 0, 1);
+    expect(listing.size() == 1 && listing[0].status == pexis::machine::DecodeStatus::Truncated,
+           "an instruction crossing the end of the range is truncated");
+    expect(listing[0].length == 1, "a truncated instruction covers only bytes inside the range");
+
     Machine small(MachineConfig{16});
     expect(small.load_program(std::vector<std::uint8_t>{static_cast<std::uint8_t>(Opcode::Load64)}, 12),
            "truncated program should load");

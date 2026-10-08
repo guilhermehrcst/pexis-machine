@@ -165,6 +165,12 @@ std::vector<DecodedInstruction> disassemble(const Memory& memory, const std::uin
 
     while (cursor < end) {
         auto decoded = decode_instruction(memory, cursor);
+        // Never present bytes outside the requested range as part of it.
+        if (decoded.length > end - cursor) {
+            decoded.status = DecodeStatus::Truncated;
+            decoded.length = static_cast<std::uint32_t>(end - cursor);
+            decoded.text = "<truncated>";
+        }
         const bool stop = decoded.status != DecodeStatus::Ok || decoded.length == 0 ||
                           decoded.opcode == op(Opcode::Halt);
         cursor += decoded.length;
