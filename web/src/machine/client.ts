@@ -5,6 +5,9 @@
 // the browser cannot drift from the simulator.
 
 import type { PexisMachineModule, WasmWebMachine } from '../wasm/pexis-machine';
+// Vite emits this WASM asset with the configured base path and a content hash.
+// Emscripten's default script-relative lookup would be fragile after bundling.
+import wasmUrl from '../wasm/pexis-machine.wasm?url';
 import {
   BoundaryError,
   parseEvents,
@@ -127,6 +130,9 @@ export class MachineClient {
 /** Loads the generated Emscripten module and creates a client. */
 export async function createMachineClient(): Promise<MachineClient> {
   const { default: createPexisMachine } = await import('../wasm/pexis-machine.js');
-  const module = await createPexisMachine();
+  const module = await createPexisMachine({
+    locateFile: (file: string, scriptDirectory: string) =>
+      file === 'pexis-machine.wasm' ? wasmUrl : `${scriptDirectory}${file}`,
+  });
   return MachineClient.fromModule(module);
 }
