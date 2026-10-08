@@ -6,7 +6,7 @@ import type { ComponentId } from '../scene/transfers';
 const COMPONENTS: ReadonlyArray<{ id: ComponentId; label: string }> = [
   { id: 'cpu', label: 'CPU' },
   { id: 'ram', label: 'RAM' },
-  { id: 'interconnect', label: 'Interconnect' },
+  { id: 'interconnect', label: 'Fabric' },
   { id: 'gpu', label: 'GPU' },
 ];
 
@@ -78,8 +78,10 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
           ) : null}
           {selected === 'interconnect' ? (
             <dl>
-              <Row label="Route" value="CPU ↔ RAM" />
-              <Row label="Bytes moved" value={byteCount(t.bytesMoved)} />
+              <Row label="Module" value="Pexis Fabric" />
+              <Row label="Observed route" value="CPU ↔ RAM" />
+              <Row label="Reserved" value="GPU · M4" />
+              <Row label="Core bytes moved" value={byteCount(t.bytesMoved)} />
               <Row label="Timing" value="Not modeled in M1" />
             </dl>
           ) : null}

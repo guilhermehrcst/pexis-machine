@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { MachineStatus } from '../machine/types';
 import { buildPexisComputeModule } from './components/PexisComputeModule';
+import { buildPexisFabric } from './components/PexisFabric';
 import { buildPexisMemoryModule } from './components/PexisMemoryModule';
 import { NO_INSETS, boxCorners, fitPointsToView, type FramingInsets } from './framing';
 import { boxGeometry, roundedBoxGeometry } from './primitives';
@@ -59,7 +60,6 @@ const TRANSFER_LABEL: Readonly<Record<TransferKind, string>> = {
   write: 'Store',
 };
 
-const Y_TRACE = 0.035;
 const CPU_POS = new THREE.Vector3(0, 0, -1.25);
 const RAM_POS = new THREE.Vector3(-2.85, 0, 1.35);
 const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
@@ -400,6 +400,12 @@ export class MachineScene {
     edges.position.copy(shell.position);
     group.add(edges);
 
+    // A reserved visual port only. No GPU hardware or data path is simulated.
+    const graphicsPort = new THREE.Object3D();
+    graphicsPort.name = 'anchor.fabric-planned-port';
+    graphicsPort.position.set(GPU_POS.x - 1.35, 0.035, GPU_POS.z);
+    group.add(graphicsPort);
+
     this.#registerComponent(
       createVisualComponent<ComponentId>({
         id: 'gpu',
@@ -418,52 +424,39 @@ export class MachineScene {
   }
 
   #buildInterconnect(): void {
-    const group = new THREE.Group();
-    const ramGeometry: THREE.Object3D[] = [];
-    const gpuReservedGeometry: THREE.Object3D[] = [];
-    // CPU <-> RAM bus: three parallel lanes; the centre lane carries pulses.
-    const traceMaterial = (): THREE.MeshStandardMaterial =>
-      new THREE.MeshStandardMaterial({ color: COLOR.trace, roughness: 0.5, emissive: COLOR.accent, emissiveIntensity: 0 });
-
-    for (const offset of [-0.11, 0, 0.11]) {
-      const curve = busPath(-1, offset);
-      const material = traceMaterial();
-      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 96, offset === 0 ? 0.026 : 0.018, 8), material);
-      tube.receiveShadow = true;
-      group.add(tube);
-      ramGeometry.push(tube);
-      this.#ramLanes.push({ curve, material });
+    // All ports must belong to the actual visual components. No anonymous
+    // coordinate guessed inside the Fabric builder or new simulator topology.
+    const ramPort = this.#components.getPart('ram', 'slot')?.anchor;
+    const cpu = this.#components.getComponent('cpu');
+    const gpu = this.#components.getComponent('gpu');
+    const cpuPort = cpu?.root.getObjectByName('anchor.fabric-port');
+    const cpuReservedPort = cpu?.root.getObjectByName('anchor.fabric-planned-port');
+    const gpuReservedPort = gpu?.root.getObjectByName('anchor.fabric-planned-port');
+    if (!ramPort || !cpuPort || !cpuReservedPort || !gpuReservedPort) {
+      throw new Error('Missing semantic Pexis Fabric port: refusing disconnected geometry');
     }
 
-    // CPU <-> GPU: reserved route, dashed, never animated.
-    for (const offset of [-0.11, 0, 0.11]) {
-      const points = busPath(1, offset).getSpacedPoints(80);
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(points),
-        new THREE.LineDashedMaterial({ color: COLOR.ghostEdge, dashSize: 0.07, gapSize: 0.07 }),
-      );
-      line.computeLineDistances();
-      group.add(line);
-      gpuReservedGeometry.push(line);
-    }
+    this.#scene.updateMatrixWorld(true);
+    const build = buildPexisFabric({
+      memory: ramPort.getWorldPosition(new THREE.Vector3()),
+      compute: cpuPort.getWorldPosition(new THREE.Vector3()),
+      graphicsReserved: gpuReservedPort.getWorldPosition(new THREE.Vector3()),
+      computeReserved: cpuReservedPort.getWorldPosition(new THREE.Vector3()),
+    });
+    this.#ramLanes = [...build.activeLanes];
+    this.#registerComponent(build.component);
 
-    this.#registerComponent(
-      createVisualComponent<ComponentId>({
-        id: 'interconnect',
-        kind: 'fabric',
-        root: group,
-        parts: [
-          { id: 'ram-lanes', role: 'active-data-path', objects: ramGeometry },
-          { id: 'gpu-reserved-lanes', role: 'planned-data-path', objects: gpuReservedGeometry },
-        ],
-      }),
+    // Passive Fabric is independently selectable without stealing touch
+    // targets from compute, RAM, or the still-planned GPU.
+    this.#addHitTarget('interconnect', boxGeometry(1.32, 0.22, 1.75), new THREE.Vector3(0, 0.12, 0.66));
+    this.#addHitTarget('interconnect', boxGeometry(1.32, 0.20, 0.34), new THREE.Vector3(-1.01, 0.12, 1.35));
+    this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.66), 1.66, 1.96);
+    this.#addLabel(
+      'interconnect',
+      'Pexis Fabric',
+      'CPU ↔ RAM · GPU planned',
+      new THREE.Vector3(0, 0.24, 0.66),
     );
-
-    // Hit target along the RAM bus.
-    this.#addHitTarget('interconnect', boxGeometry(1.4, 0.3, 0.5), new THREE.Vector3(-1.05, 0.1, 1.35));
-    this.#addHitTarget('interconnect', boxGeometry(0.5, 0.3, 1.5), new THREE.Vector3(-0.45, 0.1, 0.5));
-    const mid = this.#ramLanes[1]!.curve.getPointAt(0.5);
-    this.#addLabel('interconnect', 'Interconnect', 'CPU ↔ RAM', mid.clone().add(new THREE.Vector3(0.9, 0.15, 0.25)));
   }
 
   #buildPulse(): void {
@@ -741,32 +734,6 @@ export class MachineScene {
 }
 
 // ------------------------------------------------------------------ helpers
-
-/**
- * Orthogonal bus route from a memory-side component to the CPU, with rounded
- * corners. side = -1 is RAM (left), side = 1 is the GPU placeholder (right).
- * The curve always runs from the component towards the CPU.
- */
-function busPath(side: -1 | 1, offset: number): THREE.CurvePath<THREE.Vector3> {
-  const startX = side * 1.5;
-  // The outer lane (larger z) turns last so parallel lanes never cross.
-  const cornerX = side * (0.45 - offset);
-  const z0 = RAM_POS.z + offset;
-  const zEnd = CPU_POS.z + 1.0;
-  const r = 0.3;
-  const sx = Math.sign(cornerX - startX);
-
-  const path = new THREE.CurvePath<THREE.Vector3>();
-  const a = new THREE.Vector3(startX, Y_TRACE, z0);
-  const b = new THREE.Vector3(cornerX - sx * r, Y_TRACE, z0);
-  const c = new THREE.Vector3(cornerX, Y_TRACE, z0);
-  const d = new THREE.Vector3(cornerX, Y_TRACE, z0 - r);
-  const e = new THREE.Vector3(cornerX, Y_TRACE, zEnd);
-  path.add(new THREE.LineCurve3(a, b));
-  path.add(new THREE.QuadraticBezierCurve3(b, c, d));
-  path.add(new THREE.LineCurve3(d, e));
-  return path;
-}
 
 function roundedRect(shape: THREE.Shape | THREE.Path, x: number, y: number, w: number, h: number, r: number): void {
   shape.moveTo(x + r, y);

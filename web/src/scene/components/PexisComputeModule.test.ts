@@ -21,6 +21,12 @@ describe('Pexis Compute Module', () => {
     expect(component.getPart('contacts')?.anchor?.name).toBe('anchor.contacts');
     expect(component.getPart('module-frame')?.anchor?.name).toBe('anchor.module-frame');
     expect(component.getPart('compute-tile')?.anchor?.name).toBe('anchor.compute-tile');
+    const livePort = component.root.getObjectByName('anchor.fabric-port');
+    const plannedPort = component.root.getObjectByName('anchor.fabric-planned-port');
+    expect(livePort?.position.x).toBeLessThan(0);
+    expect(plannedPort?.position.x).toBeGreaterThan(0);
+    expect(livePort?.position.z).toBeCloseTo(1.0);
+    expect(plannedPort?.position.z).toBeCloseTo(1.0);
   });
 
   it('stays inside the M1B procedural renderable budget', () => {
