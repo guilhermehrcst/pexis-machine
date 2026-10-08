@@ -56,6 +56,7 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
           </div>
           {selected === 'cpu' ? (
             <dl>
+              <Row label="Module" value="Pexis Compute" />
               <Row label="Model" value="Functional, in-order" />
               <Row label="Status" value={STATUS_LABEL[snapshot.status]} />
               <Row label="PC" value={hexAddress(snapshot.pc, width)} />

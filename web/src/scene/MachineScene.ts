@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { MachineStatus } from '../machine/types';
+import { buildPexisComputeModule } from './components/PexisComputeModule';
 import { boxGeometry, roundedBoxGeometry } from './primitives';
 import {
   MachineVisualRegistry,
@@ -301,75 +302,18 @@ export class MachineScene {
   }
 
   #buildCpu(): void {
-    const group = new THREE.Group();
-    group.position.copy(CPU_POS);
+    const build = buildPexisComputeModule();
+    build.component.root.position.copy(CPU_POS);
+    this.#ringMaterial = build.activityMaterial;
+    this.#registerComponent(build.component);
 
-    const substrate = new THREE.Mesh(
-      roundedBoxGeometry(2.0, 0.14, 2.0, 3, 0.05),
-      new THREE.MeshStandardMaterial({ color: COLOR.graphite, roughness: 0.55, metalness: 0.1 }),
+    this.#addHitTarget(
+      'cpu',
+      boxGeometry(build.width + 0.12, build.height + 0.2, build.depth + 0.12),
+      CPU_POS.clone().setY(build.height / 2),
     );
-    substrate.position.y = 0.07;
-    substrate.castShadow = true;
-    substrate.receiveShadow = true;
-    group.add(substrate);
-
-    // Fine contact pads around the package edge.
-    const pad = boxGeometry(0.06, 0.012, 0.12);
-    const padMaterial = new THREE.MeshStandardMaterial({ color: COLOR.gold, roughness: 0.35, metalness: 0.8 });
-    const pads = new THREE.InstancedMesh(pad, padMaterial, 4 * 13);
-    const m = new THREE.Matrix4();
-    let n = 0;
-    for (let side = 0; side < 4; side += 1) {
-      for (let i = 0; i < 13; i += 1) {
-        const offset = -0.78 + i * 0.13;
-        const rotation = new THREE.Matrix4().makeRotationY((side * Math.PI) / 2);
-        m.makeTranslation(offset, 0.146, 0.9).premultiply(rotation);
-        pads.setMatrixAt(n++, m);
-      }
-    }
-    group.add(pads);
-
-    // Activity ring: lights up when the core retires, halts or faults.
-    this.#ringMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: COLOR.ringIdle,
-      emissiveIntensity: 0.25,
-      roughness: 0.4,
-    });
-    const ringShape = new THREE.Shape();
-    roundedRect(ringShape, -0.7, -0.7, 1.4, 1.4, 0.12);
-    const hole = new THREE.Path();
-    roundedRect(hole, -0.64, -0.64, 1.28, 1.28, 0.09);
-    ringShape.holes.push(hole);
-    const ring = new THREE.Mesh(new THREE.ShapeGeometry(ringShape, 6), this.#ringMaterial);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.143;
-    group.add(ring);
-
-    const spreader = new THREE.Mesh(
-      roundedBoxGeometry(1.22, 0.1, 1.22, 3, 0.06),
-      new THREE.MeshStandardMaterial({ color: COLOR.spreader, roughness: 0.32, metalness: 0.75 }),
-    );
-    spreader.position.y = 0.19;
-    spreader.castShadow = true;
-    group.add(spreader);
-
-    this.#registerComponent(
-      createVisualComponent<ComponentId>({
-        id: 'cpu',
-        kind: 'compute',
-        root: group,
-        parts: [
-          { id: 'substrate', role: 'package-substrate', objects: [substrate] },
-          { id: 'contacts', role: 'electrical-contacts', objects: [pads] },
-          { id: 'activity-ring', role: 'observation-activity', objects: [ring] },
-          { id: 'heat-spreader', role: 'package-cover', objects: [spreader] },
-        ],
-      }),
-    );
-    this.#addHitTarget('cpu', boxGeometry(2.1, 0.5, 2.1), CPU_POS.clone().setY(0.2));
-    this.#addFootprint('cpu', CPU_POS, 2.3, 2.3);
-    this.#addLabel('cpu', 'CPU', 'Functional core', CPU_POS.clone().setY(0.55));
+    this.#addFootprint('cpu', CPU_POS, build.width + 0.22, build.depth + 0.22);
+    this.#addLabel('cpu', 'CPU', 'Pexis Compute · functional core', CPU_POS.clone().setY(0.68));
   }
 
   #buildRam(): void {

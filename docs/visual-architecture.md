@@ -84,6 +84,34 @@ The activity ring and edge are explicitly observation roles. They are not simula
 `web/src/scene/primitives.ts` is intentionally small. M1A centralizes only shapes already needed by the existing
 scene. New primitives are added when a real Pexis component needs them, not speculatively.
 
+## M1B: Pexis Compute Module
+
+The first authorial hardware component is the **Pexis Compute Module**. It replaces the M1 blockout CPU package
+with a procedural industrial package while preserving the same simulator-facing identity: `cpu`.
+
+The module is intentionally physical-looking but architecturally honest:
+
+- it does not invent cores, cache hierarchy, frequency, temperature, or timing;
+- its status ring remains an observation surface driven by real simulator state;
+- repeated package contacts and frame details use `InstancedMesh`;
+- semantic anchors are published for the package, contacts, frame, and compute surface;
+- the component remains small enough to preserve the scene's browser-first rendering budget.
+
+Current semantic parts:
+
+```text
+cpu · compute
+  ├─ package
+  ├─ contacts
+  ├─ module-frame
+  ├─ compute-tile
+  └─ activity-ring
+```
+
+The `compute-tile` is a physical visual surface, not a claim about the simulator's internal floorplan. A future
+logical representation may map the same component id to cores, caches, or controllers only when the core exposes
+those concepts.
+
 ## Future asset adapter
 
 If a later component uses GLB, its loader must produce the same `MachineVisualComponent` contract. The rest of the
