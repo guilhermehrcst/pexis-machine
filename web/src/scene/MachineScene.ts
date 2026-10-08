@@ -66,8 +66,9 @@ const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
 // Authored 3/4 view. Only the direction is authored; distance and target are
 // solved geometrically by fitPointsToView for every viewport.
 const DEFAULT_VIEW_DIRECTION = new THREE.Vector3(2.6, 6.25, 8.45).normalize();
-// Labels are DOM boxes above their anchor; reserve this much world height above
-// each anchor so a fitted view never crops a label.
+// Labels are DOM boxes above their anchor; reserve this much room above each
+// anchor, along the camera's screen-up axis, so a fitted view never crops a
+// label whatever the orbit angle.
 const LABEL_ALLOWANCE = 0.45;
 
 /** Overlay space in CSS pixels on each edge of the viewport. */
@@ -101,6 +102,7 @@ export class MachineScene {
   readonly #textures: THREE.Texture[] = [];
   readonly #components = new MachineVisualRegistry<ComponentId>();
   readonly #framingPoints: THREE.Vector3[] = [];
+  readonly #labelAnchors: THREE.Vector3[] = [];
   #insetsPx: FramingInsetsPx = NO_INSETS;
   #userOrbited = false;
 
@@ -708,8 +710,13 @@ export class MachineScene {
       left: (this.#insetsPx.left + pad) / width,
       right: (this.#insetsPx.right + pad) / width,
     };
+    // Screen-up for this direction: world up with its component along the view
+    // direction removed. Label room is reserved along it, not along world Y.
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const screenUp = worldUp.clone().addScaledVector(direction, -worldUp.dot(direction)).normalize();
+    const labelPoints = this.#labelAnchors.map((anchor) => anchor.clone().addScaledVector(screenUp, LABEL_ALLOWANCE));
     const fit = fitPointsToView({
-      points: this.#framingPoints,
+      points: [...this.#framingPoints, ...this.#labelAnchors, ...labelPoints],
       direction,
       fov: this.#camera.fov,
       aspect: this.#camera.aspect,
@@ -732,10 +739,18 @@ export class MachineScene {
     for (const component of this.#components.values()) {
       points.push(...boxCorners(new THREE.Box3().setFromObject(component.root)));
     }
-    // Labels float above their anchors (see #addLabel); keep them in frame.
+    // Selection outlines are wider than their components; a selected one must
+    // not be clipped either.
+    for (const footprint of this.#footprints.values()) {
+      points.push(...boxCorners(new THREE.Box3().setFromObject(footprint)));
+    }
+    // Labels float above their anchors (see #addLabel); #frame3d reserves room
+    // above each anchor along the screen-up axis of the chosen view.
+    const anchors = this.#labelAnchors;
+    anchors.length = 0;
     this.#scene.traverse((object) => {
       if (object instanceof CSS2DObject && object.element.classList.contains('scene-label')) {
-        points.push(object.position.clone().setY(object.position.y + LABEL_ALLOWANCE));
+        anchors.push(object.position.clone());
       }
     });
   }

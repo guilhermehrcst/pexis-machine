@@ -654,6 +654,11 @@ button:disabled {
     radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #f6f5f1 60%, #efede7 100%);
 }
 
+/* The legend shares the bottom-left corner with an open inspector card. */
+.stage__viewport:has(.inspector__card) .stage__legend {
+  visibility: hidden;
+}
+
 .stage__legend {
   position: absolute;
   left: 14px;
@@ -783,11 +788,13 @@ button:disabled {
 
 /* -------------------------------------------------------------- inspector */
 
+/* The switcher sits on top; the detail card sits in the bottom-left corner.
+   In the framed 3/4 view that corner is the empty front of the platform, so
+   the card never covers the hardware or its labels (the top-left corner holds
+   the RAM). The camera framing reserves only the switcher and the legend. */
 .inspector {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  inset: 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -833,8 +840,11 @@ button:disabled {
 }
 
 .inspector__card {
-  width: min(280px, 100%);
-  padding: 10px 12px 12px;
+  margin-top: auto;
+  width: min(260px, 100%);
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  line-height: 1.35;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: rgb(255 255 255 / 92%);
@@ -847,7 +857,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .inspector__head h3 {
@@ -858,7 +868,7 @@ button:disabled {
 .inspector__card dl {
   margin: 0;
   display: grid;
-  gap: 3px;
+  gap: 1px;
 }
 
 .inspector__row {
