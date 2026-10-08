@@ -3,14 +3,17 @@ import { boxGeometry, roundedBoxGeometry } from '../primitives';
 import { createVisualComponent, type MachineVisualComponent } from '../semantic';
 import type { ComponentId } from '../transfers';
 
+// Pexis hardware palette: graphite structure, satin metal, a quiet silicon
+// surface and nickel contacts. Saturated colour is reserved for real
+// activity (the ring is driven by simulator events, see MachineScene).
 const COLOR = {
-  substrate: 0x25282e,
-  substrateEdge: 0x17191e,
-  carrier: 0xbfc4cc,
-  carrierRail: 0x606670,
-  silicon: 0x10151d,
-  contact: 0xc7a45c,
+  substrate: 0x262a31,
+  carrier: 0xb8bdc5,
+  carrierRail: 0x7d838d,
+  silicon: 0x222935,
+  contact: 0x9ea3ab,
   activityIdle: 0x8f96a3,
+  activityBase: 0x5d636d,
 } as const;
 
 export interface PexisComputeModuleBuild {
@@ -46,26 +49,13 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
   substrate.receiveShadow = true;
   root.add(substrate);
 
-  const underside = new THREE.Mesh(
-    roundedBoxGeometry(2.02, 0.055, 2.02, 3, 0.045),
-    new THREE.MeshStandardMaterial({
-      color: COLOR.substrateEdge,
-      roughness: 0.62,
-      metalness: 0.08,
-    }),
-  );
-  underside.name = 'compute.underside';
-  underside.position.y = 0.022;
-  underside.receiveShadow = true;
-  root.add(underside);
-
   const contactGeometry = boxGeometry(0.064, 0.014, 0.125);
   const contacts = new THREE.InstancedMesh(
     contactGeometry,
     new THREE.MeshStandardMaterial({
       color: COLOR.contact,
-      roughness: 0.3,
-      metalness: 0.86,
+      roughness: 0.38,
+      metalness: 0.7,
     }),
     64,
   );
@@ -95,9 +85,11 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
   const carrier = new THREE.Mesh(
     roundedBoxGeometry(1.72, 0.13, 1.72, 4, 0.075),
     new THREE.MeshStandardMaterial({
+      // Satin, not mirror: the scene has no environment map, so high
+      // metalness renders as dark banding instead of brushed metal.
       color: COLOR.carrier,
-      roughness: 0.27,
-      metalness: 0.82,
+      roughness: 0.46,
+      metalness: 0.55,
     }),
   );
   carrier.name = 'compute.carrier';
@@ -109,8 +101,8 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
     roundedBoxGeometry(1.18, 0.055, 1.18, 3, 0.035),
     new THREE.MeshStandardMaterial({
       color: COLOR.silicon,
-      roughness: 0.22,
-      metalness: 0.34,
+      roughness: 0.4,
+      metalness: 0.22,
     }),
   );
   computeTile.name = 'compute.tile';
@@ -124,8 +116,8 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
     railGeometry,
     new THREE.MeshStandardMaterial({
       color: COLOR.carrierRail,
-      roughness: 0.32,
-      metalness: 0.78,
+      roughness: 0.42,
+      metalness: 0.5,
     }),
     4,
   );
@@ -139,7 +131,9 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
   root.add(rails);
 
   const activityMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
+    // A quiet graphite line at rest; emissive colour (set by MachineScene from
+    // real machine state) is what makes it read.
+    color: COLOR.activityBase,
     emissive: COLOR.activityIdle,
     emissiveIntensity: 0.25,
     roughness: 0.36,
@@ -166,7 +160,7 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
       {
         id: 'package',
         role: 'compute-package',
-        objects: [substrate, underside],
+        objects: [substrate],
         anchor: packageAnchor,
       },
       {

@@ -37,9 +37,9 @@ describe('Pexis Compute Module', () => {
       }
     });
 
-    // Seven renderables total, including both InstancedMesh detail groups.
+    // Six renderables total, including both InstancedMesh detail groups.
     // The guard prevents decorative detail from silently becoming draw-call sprawl.
-    expect(renderables).toBeLessThanOrEqual(7);
+    expect(renderables).toBeLessThanOrEqual(6);
   });
 
   it('uses instancing for repeated package details', () => {
@@ -51,5 +51,29 @@ describe('Pexis Compute Module', () => {
 
     expect(instances).toHaveLength(2);
     expect(instances.map((mesh) => mesh.count).sort((a, b) => a - b)).toEqual([4, 64]);
+  });
+
+  it('has no renderable hidden inside another one or below the platform', () => {
+    // Regression for the M1B review: compute.underside sat entirely inside the
+    // substrate footprint and under the platform top, so it never drew a pixel.
+    const { component } = buildPexisComputeModule();
+    component.root.updateMatrixWorld(true);
+    const boxes: Array<{ name: string; box: THREE.Box3 }> = [];
+    component.root.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        if (object instanceof THREE.InstancedMesh) object.computeBoundingBox();
+        boxes.push({ name: object.name, box: new THREE.Box3().setFromObject(object) });
+      }
+    });
+    const eps = 0.01;
+    for (const a of boxes) {
+      expect(a.box.min.y, `${a.name} reaches below the platform top`).toBeGreaterThanOrEqual(-eps);
+      for (const b of boxes) {
+        if (a === b) continue;
+        const inside = b.box.clone().expandByScalar(eps).containsBox(a.box);
+        expect(inside, `${a.name} is enclosed by ${b.name}`).toBe(false);
+      }
+    }
+    expect(boxes.map((b) => b.name)).not.toContain('compute.underside');
   });
 });

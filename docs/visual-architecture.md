@@ -50,12 +50,14 @@ A component fails closed during construction when:
 This is the equivalent of a binding smoke test for procedural geometry. It prevents anonymous meshes from silently
 appearing in a scene where selection, inspection, x-ray, or future annotations cannot address them.
 
-## Current M1A component map
+## Historical baseline: M1A component map
 
-The current visuals are intentionally preserved while receiving semantic identity:
+> This is the M1A map, kept for history. M1A gave the M1 blockout semantic identity without changing the
+> picture. The CPU entry was replaced by the Pexis Compute Module in M1B; see below for the current map.
+> RAM, interconnect and GPU still use their M1A parts.
 
 ```text
-cpu · compute
+cpu · compute   (M1A blockout — superseded by M1B)
   ├─ substrate
   ├─ contacts
   ├─ activity-ring
@@ -97,20 +99,47 @@ The module is intentionally physical-looking but architecturally honest:
 - semantic anchors are published for the package, contacts, frame, and compute surface;
 - the component remains small enough to preserve the scene's browser-first rendering budget.
 
-Current semantic parts:
+Current semantic parts (M1B, refined in M1B.1):
 
 ```text
-cpu · compute
-  ├─ package
-  ├─ contacts
-  ├─ module-frame
-  ├─ compute-tile
-  └─ activity-ring
+cpu · compute                         renderables
+  ├─ package         compute-package     compute.substrate
+  ├─ contacts        electrical-contacts compute.contacts        (InstancedMesh ×64)
+  ├─ module-frame    industrial-frame    compute.carrier, compute.frame-rails (InstancedMesh ×4)
+  ├─ compute-tile    physical-compute-surface   compute.tile
+  └─ activity-ring   observation-activity       compute.activity-ring
 ```
+
+Six renderables in total, enforced by `PexisComputeModule.test.ts` together with a geometric check that no
+renderable is enclosed by another one or sits below the platform. M1B shipped a seventh, `compute.underside`,
+that was entirely inside the substrate footprint and under the platform top, so it never drew a pixel; M1B.1
+removed it.
+
+Materials follow the Pexis hardware palette: graphite structure, satin (not mirror) metal, a quiet silicon
+surface and nickel contacts. The activity ring is a graphite line at rest; only the simulator-driven emissive
+state (activity, halted, faulted) gives it colour.
 
 The `compute-tile` is a physical visual surface, not a claim about the simulator's internal floorplan. A future
 logical representation may map the same component id to cores, caches, or controllers only when the core exposes
 those concepts.
+
+## Camera framing (M1B.1)
+
+The camera frames the **hardware**, not the platform, and does so geometrically
+(`web/src/scene/framing.ts`, pure and unit-tested):
+
+- the points to frame are the corners of each component's bounding box plus the label anchors (a single
+  enclosing box would also frame the empty space between components);
+- `SceneView` measures the HTML overlays of the stage (component switcher, legend) and passes them as insets;
+- `fitPointsToView` keeps the authored view direction, solves the smallest camera distance at which every point
+  projects inside the free area, and re-centres the projection in it;
+- on resize or rotation the fit is recomputed. Until the user orbits, the authored 3/4 direction is used; after
+  that, the user's viewing angle is kept and only distance and target are refitted.
+
+Measured in the authored view, the hardware fills a free area of about 2:1 (width:height). A taller stage only
+adds space no camera can use, so the stage height follows the stage width (`50cqi` plus the overlay chrome)
+instead of stretching to the side rail. Labels are anchored by their bottom edge above the part they name, so they
+never cover it.
 
 ## Future asset adapter
 
@@ -135,5 +164,7 @@ the semantic layer independent from renderer policy.
 
 ## Next gate
 
-M1B should build the first authorial **Pexis Compute Module** on top of this contract. That work may add semantic
-anchors and richer hardware primitives, but must not move CPU behavior into the visual layer.
+M1B (Pexis Compute Module) is integrated and was refined in M1B.1. The next milestone is **M1C**: the next
+authorial component on this contract, starting with the Pexis Memory Module and the Fabric's role as the visual
+connection between modules. RAM still uses its M1A blockout (including gold contacts that no longer match the
+Compute Module's nickel finish). M1C must not move memory behavior into the visual layer either.

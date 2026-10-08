@@ -619,7 +619,9 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) clamp(330px, 27vw, 410px);
   grid-template-areas:
     'stage rail'
-    'memory events';
+    'memory rail'
+    'events rail';
+  align-items: start;
   gap: var(--gap);
   padding: var(--gap) 18px 18px;
   min-width: 0;
@@ -630,7 +632,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 560px;
+  container-type: inline-size;
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
   background: var(--surface);
@@ -638,12 +640,23 @@ button:disabled {
   overflow: hidden;
 }
 
+/* The stage is as tall as the machine needs, not as tall as the side rail.
+   Measured: in the authored 3/4 view the hardware fills a free area of
+   about 2:1 (width:height); taller stages only add empty space the camera
+   cannot use. Height = half the stage width + the space taken by the HTML
+   overlays (component switcher on top, legend at the bottom). */
 .stage__viewport {
   position: relative;
-  flex: 1;
-  min-height: 380px;
+  aspect-ratio: 16 / 10;
+  height: clamp(300px, calc(50cqi + 128px), 74vh);
+  max-height: 74vh;
   background:
     radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #f6f5f1 60%, #efede7 100%);
+}
+
+/* The legend shares the bottom-left corner with an open inspector card. */
+.stage__viewport:has(.inspector__card) .stage__legend {
+  visibility: hidden;
 }
 
 .stage__legend {
@@ -775,11 +788,13 @@ button:disabled {
 
 /* -------------------------------------------------------------- inspector */
 
+/* The switcher sits on top; the detail card sits in the bottom-left corner.
+   In the framed 3/4 view that corner is the empty front of the platform, so
+   the card never covers the hardware or its labels (the top-left corner holds
+   the RAM). The camera framing reserves only the switcher and the legend. */
 .inspector {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  inset: 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -825,8 +840,11 @@ button:disabled {
 }
 
 .inspector__card {
-  width: min(280px, 100%);
-  padding: 10px 12px 12px;
+  margin-top: auto;
+  width: min(260px, 100%);
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  line-height: 1.35;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: rgb(255 255 255 / 92%);
@@ -839,7 +857,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .inspector__head h3 {
@@ -850,7 +868,7 @@ button:disabled {
 .inspector__card dl {
   margin: 0;
   display: grid;
-  gap: 3px;
+  gap: 1px;
 }
 
 .inspector__row {
@@ -1696,14 +1714,7 @@ button:disabled {
       'rail'
       'memory'
       'events';
-  }
-
-  .stage {
-    min-height: 0;
-  }
-
-  .stage__viewport {
-    min-height: clamp(360px, 56vh, 620px);
+    align-items: stretch;
   }
 
   .rail {

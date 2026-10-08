@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { MachineStatus } from '../machine/types';
 import { buildPexisComputeModule } from './components/PexisComputeModule';
+import { NO_INSETS, boxCorners, fitPointsToView, type FramingInsets } from './framing';
 import { boxGeometry, roundedBoxGeometry } from './primitives';
 import {
   MachineVisualRegistry,
@@ -62,6 +63,17 @@ const CPU_POS = new THREE.Vector3(0, 0, -1.25);
 const RAM_POS = new THREE.Vector3(-2.85, 0, 1.35);
 const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
 
+// Authored 3/4 view. Only the direction is authored; distance and target are
+// solved geometrically by fitPointsToView for every viewport.
+const DEFAULT_VIEW_DIRECTION = new THREE.Vector3(2.6, 6.25, 8.45).normalize();
+// Labels are DOM boxes above their anchor; reserve this much room above each
+// anchor, along the camera's screen-up axis, so a fitted view never crops a
+// label whatever the orbit angle.
+const LABEL_ALLOWANCE = 0.45;
+
+/** Overlay space in CSS pixels on each edge of the viewport. */
+export type FramingInsetsPx = FramingInsets;
+
 interface Animation {
   readonly transfer: Transfer;
   readonly start: number;
@@ -89,6 +101,10 @@ export class MachineScene {
   readonly #labelElements = new Map<ComponentId, HTMLElement>();
   readonly #textures: THREE.Texture[] = [];
   readonly #components = new MachineVisualRegistry<ComponentId>();
+  readonly #framingPoints: THREE.Vector3[] = [];
+  readonly #labelAnchors: THREE.Vector3[] = [];
+  #insetsPx: FramingInsetsPx = NO_INSETS;
+  #userOrbited = false;
 
   #frame = 0;
   #pointerDown: { x: number; y: number } | null = null;
@@ -133,17 +149,14 @@ export class MachineScene {
     this.#labels.domElement.setAttribute('aria-hidden', 'true');
     container.appendChild(this.#labels.domElement);
 
-    this.#camera.position.set(2.6, 6.4, 8.6);
     this.#controls = new OrbitControls(this.#camera, this.#renderer.domElement);
-    this.#controls.target.set(0, 0.15, 0.15);
     this.#controls.enableDamping = true;
     this.#controls.dampingFactor = 0.09;
     this.#controls.enablePan = false;
-    this.#controls.minDistance = 6;
-    this.#controls.maxDistance = 20;
     this.#controls.minPolarAngle = 0.25;
     this.#controls.maxPolarAngle = 1.32;
     this.#controls.addEventListener('change', this.#requestRender);
+    this.#controls.addEventListener('start', this.#onOrbitStart);
 
     this.#buildLights();
     this.#buildPlatform();
@@ -152,6 +165,7 @@ export class MachineScene {
     this.#buildGpu();
     this.#buildInterconnect();
     this.#buildPulse();
+    this.#computeFramingPoints();
 
     const canvas = this.#renderer.domElement;
     canvas.addEventListener('pointerdown', this.#onPointerDown);
@@ -164,6 +178,21 @@ export class MachineScene {
   }
 
   // ---------------------------------------------------------------- public
+
+  /**
+   * Screen space covered by HTML overlays (CSS px). The camera frames the
+   * hardware inside the remaining area.
+   */
+  setFramingInsets(insets: FramingInsetsPx): void {
+    const same =
+      insets.top === this.#insetsPx.top &&
+      insets.right === this.#insetsPx.right &&
+      insets.bottom === this.#insetsPx.bottom &&
+      insets.left === this.#insetsPx.left;
+    if (same) return;
+    this.#insetsPx = insets;
+    this.#onResize();
+  }
 
   setReducedMotion(reduced: boolean): void {
     this.#reducedMotion = reduced;
@@ -226,6 +255,7 @@ export class MachineScene {
     canvas.removeEventListener('pointerup', this.#onPointerUp);
     canvas.removeEventListener('pointermove', this.#onPointerMove);
     this.#controls.removeEventListener('change', this.#requestRender);
+    this.#controls.removeEventListener('start', this.#onOrbitStart);
     this.#controls.dispose();
 
     const materials = new Set<THREE.Material>();
@@ -313,7 +343,12 @@ export class MachineScene {
       CPU_POS.clone().setY(build.height / 2),
     );
     this.#addFootprint('cpu', CPU_POS, build.width + 0.22, build.depth + 0.22);
-    this.#addLabel('cpu', 'CPU', 'Pexis Compute · functional core', CPU_POS.clone().setY(0.68));
+    this.#addLabel(
+      'cpu',
+      'CPU',
+      'Pexis Compute · functional core',
+      CPU_POS.clone().add(new THREE.Vector3(0, build.height + 0.06, -build.depth / 2)),
+    );
   }
 
   #buildRam(): void {
@@ -385,7 +420,7 @@ export class MachineScene {
     );
     this.#addHitTarget('ram', boxGeometry(2.8, 1.0, 0.7), RAM_POS.clone().setY(0.45));
     this.#addFootprint('ram', RAM_POS, 3.0, 0.9);
-    this.#addLabel('ram', 'RAM', this.#options.ramLabel, RAM_POS.clone().setY(1.12));
+    this.#addLabel('ram', 'RAM', this.#options.ramLabel, RAM_POS.clone().setY(0.92));
   }
 
   #buildGpu(): void {
@@ -428,7 +463,7 @@ export class MachineScene {
 
     this.#addHitTarget('gpu', boxGeometry(2.2, 0.5, 1.7), GPU_POS.clone().setY(0.2));
     this.#addFootprint('gpu', GPU_POS, 2.4, 1.9);
-    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.55), true);
+    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.3), true);
   }
 
   #buildInterconnect(): void {
@@ -547,6 +582,9 @@ export class MachineScene {
     sub.textContent = detail;
     element.append(name, sub);
     const object = new CSS2DObject(element);
+    // Bottom-centre anchoring: the label sits above its anchor point instead
+    // of being centred on it, so it never covers the hardware it names.
+    object.center.set(0.5, 1);
     object.position.copy(position);
     this.#labelElements.set(id, element);
     this.#scene.add(object);
@@ -652,12 +690,74 @@ export class MachineScene {
     this.#renderer.setSize(width, height, false);
     this.#labels.setSize(width, height);
     this.#camera.aspect = width / height;
-    // Fit the platform (~9.4 units wide) at the default distance; narrower
-    // (portrait) viewports zoom out further so nothing is cropped.
-    this.#camera.zoom = Math.min(0.85, this.#camera.aspect / 1.6);
-    this.#camera.updateProjectionMatrix();
+    this.#frame3d(width, height);
     this.#requestRender();
   }
+
+  /**
+   * Fits the hardware (not the platform) into the viewport area left free by
+   * overlays. Until the user orbits, the authored direction is used; after
+   * that, a resize or rotation keeps the user's viewing angle and refits.
+   */
+  #frame3d(width: number, height: number): void {
+    const direction = this.#userOrbited
+      ? this.#camera.position.clone().sub(this.#controls.target).normalize()
+      : DEFAULT_VIEW_DIRECTION;
+    const pad = 12; // breathing room in CSS px around the hardware
+    const insets: FramingInsets = {
+      top: (this.#insetsPx.top + pad) / height,
+      bottom: (this.#insetsPx.bottom + pad) / height,
+      left: (this.#insetsPx.left + pad) / width,
+      right: (this.#insetsPx.right + pad) / width,
+    };
+    // Screen-up for this direction: world up with its component along the view
+    // direction removed. Label room is reserved along it, not along world Y.
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const screenUp = worldUp.clone().addScaledVector(direction, -worldUp.dot(direction)).normalize();
+    const labelPoints = this.#labelAnchors.map((anchor) => anchor.clone().addScaledVector(screenUp, LABEL_ALLOWANCE));
+    const fit = fitPointsToView({
+      points: [...this.#framingPoints, ...this.#labelAnchors, ...labelPoints],
+      direction,
+      fov: this.#camera.fov,
+      aspect: this.#camera.aspect,
+      insets,
+    });
+    this.#camera.zoom = 1;
+    this.#camera.position.copy(fit.position);
+    this.#controls.target.copy(fit.target);
+    this.#controls.minDistance = fit.distance * 0.55;
+    this.#controls.maxDistance = fit.distance * 1.8;
+    this.#camera.updateProjectionMatrix();
+    this.#controls.update();
+  }
+
+  #computeFramingPoints(): void {
+    // Per-component boxes: a single enclosing box would also frame the empty
+    // space between components and shrink the hardware for nothing.
+    const points = this.#framingPoints;
+    points.length = 0;
+    for (const component of this.#components.values()) {
+      points.push(...boxCorners(new THREE.Box3().setFromObject(component.root)));
+    }
+    // Selection outlines are wider than their components; a selected one must
+    // not be clipped either.
+    for (const footprint of this.#footprints.values()) {
+      points.push(...boxCorners(new THREE.Box3().setFromObject(footprint)));
+    }
+    // Labels float above their anchors (see #addLabel); #frame3d reserves room
+    // above each anchor along the screen-up axis of the chosen view.
+    const anchors = this.#labelAnchors;
+    anchors.length = 0;
+    this.#scene.traverse((object) => {
+      if (object instanceof CSS2DObject && object.element.classList.contains('scene-label')) {
+        anchors.push(object.position.clone());
+      }
+    });
+  }
+
+  #onOrbitStart = (): void => {
+    this.#userOrbited = true;
+  };
 
   #onPointerDown = (event: PointerEvent): void => {
     this.#pointerDown = { x: event.clientX, y: event.clientY };
