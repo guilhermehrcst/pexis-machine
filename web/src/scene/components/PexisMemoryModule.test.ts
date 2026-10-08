@@ -60,14 +60,41 @@ describe('Pexis Memory Module', () => {
   it('does not hide complete parts inside other geometry or below the platform', () => {
     const { component } = buildPexisMemoryModule();
     component.root.updateMatrixWorld(true);
-    const boxes = renderables(component.root).map((object) => {
-      if (object instanceof THREE.InstancedMesh) object.computeBoundingBox();
-      return { name: object.name, box: new THREE.Box3().setFromObject(object) };
-    });
+
+    // InstancedMesh.getBoundingBox() encloses the ENTIRE fleet of repeated
+    // objects. It must not be used to infer one solid object: e.g. rails at
+    // both outer ends have an aggregate AABB spanning the empty middle,
+    // falsely "enclosing" surface routing that is visible between the rails.
+    // Inspect every actual primitive instance instead.
+    const instances: Array<{ name: string; box: THREE.Box3 }> = [];
+    for (const mesh of renderables(component.root)) {
+      if (!(mesh instanceof THREE.Mesh)) continue;
+      mesh.geometry.computeBoundingBox();
+      const geometryBounds = mesh.geometry.boundingBox;
+      if (!geometryBounds) throw new Error('Missing geometry bounds: ' + mesh.name);
+
+      if (mesh instanceof THREE.InstancedMesh) {
+        const local = new THREE.Matrix4();
+        for (let i = 0; i < mesh.count; i += 1) {
+          mesh.getMatrixAt(i, local);
+          const world = mesh.matrixWorld.clone().multiply(local);
+          instances.push({
+            name: mesh.name + '[' + i + ']',
+            box: geometryBounds.clone().applyMatrix4(world),
+          });
+        }
+      } else {
+        instances.push({
+          name: mesh.name,
+          box: geometryBounds.clone().applyMatrix4(mesh.matrixWorld),
+        });
+      }
+    }
+
     const eps = 0.004;
-    for (const part of boxes) {
+    for (const part of instances) {
       expect(part.box.min.y, part.name + ' below platform').toBeGreaterThanOrEqual(-eps);
-      for (const other of boxes) {
+      for (const other of instances) {
         if (part === other) continue;
         const fullyHidden = other.box.clone().expandByScalar(eps).containsBox(part.box);
         expect(fullyHidden, part.name + ' enclosed by ' + other.name).toBe(false);
