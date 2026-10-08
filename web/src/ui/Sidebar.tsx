@@ -35,7 +35,7 @@ const ITEMS: readonly NavItem[] = [
   { key: 'gpu', label: 'GPU', icon: LayersIcon, target: { view: 'machine', focus: 'gpu' }, badge: 'Planned' },
   {
     key: 'interconnect',
-    label: 'Interconnect',
+    label: 'Fabric',
     icon: Share2Icon,
     target: { view: 'machine', focus: 'interconnect' },
   },

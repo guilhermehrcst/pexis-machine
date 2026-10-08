@@ -186,9 +186,49 @@ Semantic registration never disposes geometry, materials, textures, controls, re
 `MachineScene.dispose()` remains the single disposal path. This avoids double-free-style lifecycle bugs and keeps
 the semantic layer independent from renderer policy.
 
+## M1D: Pexis Fabric
+
+Pexis Fabric replaces the basic interconnect line grouping with a standalone,
+semantically indexed procedural module in `web/src/scene/components/PexisFabric.ts`.
+
+The Fabric has one **event-backed CPU ↔ RAM path**, because the C++ simulator
+emits real fetch/load/store events, and a **planned-only GPU path** drawn as
+translucent dashed traces. There are no modeled GPU transactions, channel counts,
+physical bandwidth, fabric timing, switches, or memory controllers.
+
+Visual part contract:
+
+```text
+interconnect · fabric
+  ├─ carrier                passive-interposer
+  ├─ frame                  mechanical-frame (four instanced rails)
+  ├─ active-ports           observed-cpu-memory-endpoints
+  ├─ graphics-reserved-port planned-only-endpoint
+  ├─ fabric-mark            identity-only-detail
+  ├─ ram-lanes              event-backed-cpu-memory-link (three visual lanes)
+  └─ gpu-reserved-lanes     planned-not-simulated-link (three dashed paths)
+```
+
+The primary memory path is used by the **unchanged** MachineScene transfer
+animation; the C++ event stream alone decides whether and which way a pulse
+travels. Merely drawing multiple parallel tracks does not imply multi-channel
+hardware. The planned GPU route is structurally separate and never animates.
+
+Ports are obtained from semantic anchors on the Compute, Memory, and graphics
+placeholder component roots, transformed into world-space coordinates. Missing
+anchors fail closed instead of silently generating disconnected geometry. A
+typed visual-link manifest explicitly marks GPU as planned.
+
+The Fabric's passive interposer, endpoint pads, and understated Pexis material
+palette create a recognizable physical center without suggesting a functioning
+controller. Repeated details use InstancedMesh. Camera framing and selection
+remain driven by the existing 3D scene and accessibility controls.
+
 ## Next gate
 
-M1C introduces the Pexis Memory Module alongside M1B.1 Compute. After M1C validation and merge,
-the next focused milestone is M1D: Pexis Fabric as an authorial, event-driven visual component
-connecting simulated CPU and RAM. Unimplemented GPU links must remain visibly planned, never
-presented as active hardware.
+After the M1C memory module and M1D Fabric have been independently reviewed and
+merged, continue visual design with the planned graphics placeholder and scene
+composition. The visual layer must not grow GPU execution capabilities or
+pretend that real fabric timing has been measured. Subsequent work on memory
+hierarchies, timing, and heterogeneous execution belongs in the C++ core's
+own M2/M3/M4 milestones.

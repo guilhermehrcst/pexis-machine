@@ -150,7 +150,11 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
   const contactsAnchor = anchor('anchor.contacts', 0, 0.17, 0.98);
   const tileAnchor = anchor('anchor.compute-tile', 0, 0.38, 0);
   const frameAnchor = anchor('anchor.module-frame', 0.71, 0.36, 0);
-  root.add(packageAnchor, contactsAnchor, tileAnchor, frameAnchor);
+  // Visual connection points: the left link is observed CPU/RAM traffic;
+  // the right port is reserved for a future GPU and never simulates activity.
+  const fabricPort = anchor('anchor.fabric-port', -0.45, 0.055, 1.0);
+  const fabricReservedPort = anchor('anchor.fabric-planned-port', 0.45, 0.055, 1.0);
+  root.add(packageAnchor, contactsAnchor, tileAnchor, frameAnchor, fabricPort, fabricReservedPort);
 
   const component = createVisualComponent<ComponentId>({
     id: 'cpu',
