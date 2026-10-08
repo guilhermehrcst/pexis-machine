@@ -1,20 +1,22 @@
 # Pexis Machine Web Lab
 
-The Web Lab will be the interactive 3D observation and experiment surface for Pexis Machine.
+Browser observer and controller for the Pexis Machine C++ core compiled to WebAssembly.
 
-M0 intentionally does not implement rendering yet. First the simulator establishes a deterministic state contract. The planned boundary is:
+> Simulation is truth. Visualization is observation.
 
-```text
-C++ simulation core
-        |
-        v
-   WebAssembly
-        |
-        v
-state snapshot + explicit machine events
-        |
-        v
-Three.js 3D Web Lab
+```bash
+source /path/to/emsdk/emsdk_env.sh
+npm ci
+npm run wasm:build
+npm run dev
 ```
 
-The Web Lab must not duplicate CPU semantics, memory semantics, or telemetry calculations in JavaScript. Its job is to visualize and control the simulator through a narrow adapter.
+```text
+src/machine/   MachineClient, boundary validation, run scheduler, formatting, React hook
+src/scene/     Three.js scene and the event → transfer mapping
+src/ui/        toolbar, sidebar, panels, views
+src/wasm/      type contract of the generated module (+ generated files, git-ignored)
+```
+
+The Web Lab must not duplicate CPU semantics, memory semantics, or telemetry calculations. See
+[`../docs/web-lab.md`](../docs/web-lab.md) and [`../docs/wasm-boundary.md`](../docs/wasm-boundary.md).

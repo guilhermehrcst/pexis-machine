@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <span>
 
+#include "pexis/machine/events.hpp"
 #include "pexis/machine/isa.hpp"
 #include "pexis/machine/memory.hpp"
 #include "pexis/machine/snapshot.hpp"
@@ -37,12 +38,20 @@ public:
     [[nodiscard]] MachineSnapshot snapshot() const noexcept;
     [[nodiscard]] const Memory& memory() const noexcept;
 
+    // Events emitted by the most recent transition: step(), or the budget
+    // fault raised by run(). Cleared by every transition and by reset().
+    // A step() on a Halted or Faulted machine performs no transition and
+    // reports no events.
+    [[nodiscard]] std::span<const MachineEvent> last_events() const noexcept;
+
 private:
     [[nodiscard]] bool fetch8(std::uint64_t& cursor, std::uint8_t& value) noexcept;
     [[nodiscard]] bool fetch64(std::uint64_t& cursor, std::uint64_t& value) noexcept;
     [[nodiscard]] bool valid_register(std::uint8_t index) const noexcept;
+    [[nodiscard]] StepResult execute(std::uint64_t pc_before) noexcept;
     [[nodiscard]] StepResult fault(FaultCode code, std::uint64_t pc_before) noexcept;
     void retire(std::uint64_t next_pc) noexcept;
+    void emit(const MachineEvent& event) noexcept;
 
     Memory memory_;
     std::array<std::uint64_t, kRegisterCount> registers_{};
@@ -50,6 +59,8 @@ private:
     MachineStatus status_ = MachineStatus::Ready;
     FaultCode fault_ = FaultCode::None;
     Telemetry telemetry_{};
+    std::array<MachineEvent, kMaxEventsPerStep> events_{};
+    std::size_t event_count_ = 0;
 };
 
 } // namespace pexis::machine

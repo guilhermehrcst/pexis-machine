@@ -40,6 +40,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+      - name: Demo
+        run: ./build/pxm-demo
+
   sanitizers:
     name: ASan + UBSan
     runs-on: ubuntu-latest
@@ -63,3 +66,52 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: print_stacktrace=1
         run: ctest --test-dir build-sanitized --output-on-failure
+
+  wasm-and-web:
+    name: WebAssembly + Web Lab
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: "4.0.23"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Emscripten ${{ env.EMSDK_VERSION }}
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      - name: Build WebAssembly adapter
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          ./scripts/build-wasm.sh
+
+      - name: Core tests compiled to WebAssembly
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          ctest --test-dir build-wasm --output-on-failure
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Web tests (unit + real WebAssembly integration)
+        working-directory: web
+        run: npm test
+
+      - name: Production build
+        working-directory: web
+        run: npm run build

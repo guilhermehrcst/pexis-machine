@@ -1,5 +1,7 @@
 #include "pexis/machine/machine.hpp"
 
+#include <algorithm>
+
 namespace pexis::machine {
 
 Machine::Machine(const MachineConfig config) : memory_(config.memory_size_bytes) {}
@@ -11,6 +13,7 @@ void Machine::reset() noexcept {
     status_ = MachineStatus::Ready;
     fault_ = FaultCode::None;
     telemetry_ = {};
+    event_count_ = 0;
 }
 
 bool Machine::load_program(const std::span<const std::uint8_t> program,
@@ -51,13 +54,22 @@ bool Machine::valid_register(const std::uint8_t index) const noexcept {
     return index < registers_.size();
 }
 
+void Machine::emit(const MachineEvent& event) noexcept {
+    // The bound is structural (see kMaxEventsPerStep); never write past it.
+    if (event_count_ < events_.size()) {
+        events_[event_count_++] = event;
+    }
+}
+
 StepResult Machine::fault(const FaultCode code, const std::uint64_t pc_before) noexcept {
     status_ = MachineStatus::Faulted;
     fault_ = code;
+    emit(MachineEvent{EventKind::Faulted, code, kNoRegister, 0, pc_before, 0});
     return StepResult{status_, fault_, pc_before, pc_};
 }
 
 void Machine::retire(const std::uint64_t next_pc) noexcept {
+    emit(MachineEvent{EventKind::InstructionRetired, FaultCode::None, kNoRegister, 0, pc_, next_pc});
     pc_ = next_pc;
     ++telemetry_.instructions_retired;
     ++telemetry_.cycles;
@@ -65,12 +77,33 @@ void Machine::retire(const std::uint64_t next_pc) noexcept {
 
 StepResult Machine::step() noexcept {
     const auto pc_before = pc_;
+    event_count_ = 0;
 
     if (status_ == MachineStatus::Halted || status_ == MachineStatus::Faulted) {
         return StepResult{status_, fault_, pc_before, pc_};
     }
 
     status_ = MachineStatus::Running;
+    const auto fetched_before = telemetry_.instruction_bytes;
+    const auto result = execute(pc_before);
+
+    // Instruction bytes are fetched before any data access of the same
+    // instruction, so the fetch event is placed first. Its size is the exact
+    // telemetry delta, including bytes fetched by a faulting instruction.
+    const auto fetched = telemetry_.instruction_bytes - fetched_before;
+    if (fetched > 0 && event_count_ < events_.size()) {
+        std::copy_backward(events_.begin(),
+                           events_.begin() + static_cast<std::ptrdiff_t>(event_count_),
+                           events_.begin() + static_cast<std::ptrdiff_t>(event_count_ + 1));
+        events_[0] = MachineEvent{EventKind::InstructionFetch, FaultCode::None, kNoRegister,
+                                  static_cast<std::uint32_t>(fetched), pc_before, 0};
+        ++event_count_;
+    }
+
+    return result;
+}
+
+StepResult Machine::execute(const std::uint64_t pc_before) noexcept {
     std::uint64_t cursor = pc_;
     std::uint8_t opcode_byte = 0;
     if (!fetch8(cursor, opcode_byte)) {
@@ -99,6 +132,7 @@ StepResult Machine::step() noexcept {
             }
 
             registers_[destination] = immediate;
+            emit(MachineEvent{EventKind::RegisterWrite, FaultCode::None, destination, 0, 0, immediate});
             retire(cursor);
             break;
         }
@@ -125,6 +159,9 @@ StepResult Machine::step() noexcept {
             registers_[destination] = value;
             ++telemetry_.loads;
             telemetry_.data_bytes_read += sizeof(std::uint64_t);
+            emit(MachineEvent{EventKind::MemoryRead, FaultCode::None, destination,
+                              sizeof(std::uint64_t), address, value});
+            emit(MachineEvent{EventKind::RegisterWrite, FaultCode::None, destination, 0, 0, value});
             retire(cursor);
             break;
         }
@@ -149,6 +186,8 @@ StepResult Machine::step() noexcept {
 
             ++telemetry_.stores;
             telemetry_.data_bytes_written += sizeof(std::uint64_t);
+            emit(MachineEvent{EventKind::MemoryWrite, FaultCode::None, source,
+                              sizeof(std::uint64_t), address, registers_[source]});
             retire(cursor);
             break;
         }
@@ -164,6 +203,8 @@ StepResult Machine::step() noexcept {
             }
 
             registers_[destination] += registers_[source];
+            emit(MachineEvent{EventKind::RegisterWrite, FaultCode::None, destination, 0, 0,
+                              registers_[destination]});
             retire(cursor);
             break;
         }
@@ -171,6 +212,7 @@ StepResult Machine::step() noexcept {
         case Opcode::Halt: {
             retire(cursor);
             status_ = MachineStatus::Halted;
+            emit(MachineEvent{EventKind::Halted, FaultCode::None, kNoRegister, 0, pc_before, 0});
             break;
         }
 
@@ -185,8 +227,8 @@ MachineStatus Machine::run(const std::uint64_t max_instructions) noexcept {
     std::uint64_t executed = 0;
     while (status_ != MachineStatus::Halted && status_ != MachineStatus::Faulted) {
         if (executed >= max_instructions) {
-            status_ = MachineStatus::Faulted;
-            fault_ = FaultCode::StepLimitExceeded;
+            event_count_ = 0;
+            static_cast<void>(fault(FaultCode::StepLimitExceeded, pc_));
             break;
         }
         static_cast<void>(step());
@@ -201,6 +243,10 @@ MachineSnapshot Machine::snapshot() const noexcept {
 
 const Memory& Machine::memory() const noexcept {
     return memory_;
+}
+
+std::span<const MachineEvent> Machine::last_events() const noexcept {
+    return std::span<const MachineEvent>(events_.data(), event_count_);
 }
 
 } // namespace pexis::machine

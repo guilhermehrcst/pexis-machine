@@ -21,10 +21,10 @@ Program bytes
  MachineSnapshot
       |
       v
-future WebAssembly adapter
+WebAssembly adapter (M1)
       |
       v
-future 3D Web Lab
+3D Web Lab (M1)
 ```
 
 The simulation core is the sole owner of machine state. Frontends consume immutable snapshots and explicit events. They do not mutate CPU or memory internals directly.
@@ -79,8 +79,34 @@ bytes_moved = instruction_bytes + data_bytes_read + data_bytes_written
 
 Instruction fetch traffic is intentionally visible. Future cache and hierarchy models can refine where those bytes move without changing the meaning of the base counters.
 
-## Web boundary
+## M1: Visible Machine
 
-The future browser integration will compile or bind the C++ simulation core through WebAssembly. The public boundary should expose commands such as `load`, `reset`, `step`, and `run`, plus a serializable state snapshot.
+M1 makes the machine observable in a browser without moving any machine rule out of C++.
 
-The 3D layer may animate a RAM-to-CPU transfer only after the simulator reports the corresponding architectural event. This prevents the visualization from becoming a second, inconsistent simulator.
+```text
+C++ core (truth) ──▶ WebAssembly adapter (bridge) ──▶ MachineClient (validation) ──▶ Web Lab (observer)
+   Machine             wasm/bindings.cpp               web/src/machine                  React + Three.js
+```
+
+### Machine events
+
+Snapshots say what the state is; events say what happened. `Machine::last_events()` returns the events of the
+most recent transition (`include/pexis/machine/events.hpp`): `InstructionFetch`, `MemoryRead`, `MemoryWrite`,
+`RegisterWrite`, `InstructionRetired`, `Halted`, `Faulted`. The event buffer is a fixed-size array (no allocation
+in `step()`, which stays `noexcept`). Event totals equal telemetry counters by test.
+
+M0 semantics are unchanged: same ISA, same fault model, same telemetry. Events are additive.
+
+### Programs and experiments
+
+- `ProgramBuilder` encodes M0 instructions (verified against an independent encoder in the tests).
+- `decode_instruction` / `disassemble` are a read-only decoder used to present the program really in RAM. It never
+  executes and never touches telemetry; tests prove its instruction addresses and lengths match the fetches the
+  CPU performs.
+- `experiments()` is the single catalog (Scalar Compute, Memory Transfer, Bounds Fault) used by tests and by the
+  Web Lab.
+
+### Web boundary
+
+See [`wasm-boundary.md`](wasm-boundary.md) for the adapter contract and [`web-lab.md`](web-lab.md) for the browser
+application. The 3D layer animates a RAM ↔ CPU transfer only after the simulator reports the corresponding event.
