@@ -12,7 +12,9 @@ import type { MachineStatus } from '../machine/types';
 import { buildPexisComputeModule } from './components/PexisComputeModule';
 import { buildPexisFabric } from './components/PexisFabric';
 import { buildPexisMemoryModule } from './components/PexisMemoryModule';
-import { NO_INSETS, boxCorners, fitPointsToView, type FramingInsets } from './framing';
+import { ExplodeRig } from './explode';
+import { NO_INSETS, boxCorners, fitPointsToView, type FramingInsets, type FramingResult } from './framing';
+import { INSPECTIONS } from './inspections';
 import { boxGeometry, roundedBoxGeometry } from './primitives';
 import {
   MachineVisualRegistry,
@@ -23,6 +25,8 @@ import type { ComponentId, StepVisual, Transfer, TransferKind } from './transfer
 
 export interface MachineSceneOptions {
   readonly onSelect: (id: ComponentId | null) => void;
+  /** Exploded inspection only: a tap resolved to a semantic part, or null. */
+  readonly onSelectPart: (partId: string | null) => void;
   readonly ramLabel: string;
   readonly formatAddress: (address: bigint) => string;
 }
@@ -89,6 +93,28 @@ interface LabelAnchor {
   readonly side: LabelSide;
 }
 
+// Exploded inspection: full-range separation and camera transition times.
+const EXPLODE_MS = 700;
+const CAMERA_MS = 520;
+// Room for the selected part's side label, beyond the exploded envelope
+// along screen-right (world units, like LABEL_ALLOWANCE).
+const PART_LABEL_ALLOWANCE = 1.1;
+
+interface Tween {
+  readonly from: number;
+  readonly to: number;
+  readonly start: number;
+  readonly duration: number;
+}
+
+interface CameraTween {
+  readonly fromPosition: THREE.Vector3;
+  readonly fromTarget: THREE.Vector3;
+  readonly fit: FramingResult;
+  readonly start: number;
+  readonly duration: number;
+}
+
 /** Overlay space in CSS pixels on each edge of the viewport. */
 export type FramingInsetsPx = FramingInsets;
 
@@ -117,12 +143,25 @@ export class MachineScene {
   readonly #hitTargets: THREE.Mesh[] = [];
   readonly #footprints = new Map<ComponentId, THREE.LineLoop>();
   readonly #labelElements = new Map<ComponentId, HTMLElement>();
+  readonly #labelObjects = new Map<ComponentId, CSS2DObject>();
+  readonly #rigs = new Map<ComponentId, ExplodeRig>();
   readonly #textures: THREE.Texture[] = [];
   readonly #components = new MachineVisualRegistry<ComponentId>();
   readonly #framingPoints: THREE.Vector3[] = [];
   readonly #labelAnchors: LabelAnchor[] = [];
   #insetsPx: FramingInsetsPx = NO_INSETS;
   #userOrbited = false;
+
+  // Exploded inspection (visual only; never reaches the simulator)
+  #inspecting: ExplodeRig | null = null;
+  #closing = false;
+  #explodeTween: Tween | null = null;
+  #cameraTween: CameraTween | null = null;
+  #selectedPart: string | null = null;
+  #partBox = new THREE.Box3();
+  #partHelper!: THREE.Box3Helper;
+  #partLabel!: HTMLElement;
+  #partLabelObject!: CSS2DObject;
 
   #frame = 0;
   #pointerDown: { x: number; y: number } | null = null;
@@ -185,6 +224,7 @@ export class MachineScene {
     this.#buildGpu();
     this.#buildInterconnect();
     this.#buildPulse();
+    this.#buildInspection();
     this.#computeFramingPoints();
 
     const canvas = this.#renderer.domElement;
@@ -263,6 +303,51 @@ export class MachineScene {
     this.#ramGlowUntil = 0;
     this.#pulse.visible = false;
     this.#pulseTagObject.visible = false;
+    this.#requestRender();
+  }
+
+  /**
+   * Enters exploded inspection of a component, or leaves it (null). Leaving
+   * reassembles first, then restores every captured rest position exactly.
+   * Purely visual: the simulator is never told.
+   */
+  setInspection(id: ComponentId | null): void {
+    if (id === null) {
+      if (this.#inspecting === null || this.#closing) return;
+      this.#closing = true;
+      this.setSelectedPart(null);
+      this.#startExplode(0, true);
+      this.#frameNow(true);
+      if (this.#explodeTween === null) this.#finishClosing();
+      return;
+    }
+    const rig = this.#rigs.get(id);
+    if (!rig) throw new RangeError(`component "${id}" has no exploded inspection`);
+    if (this.#inspecting === rig) {
+      if (!this.#closing) return;
+      this.#closing = false; // re-entered while reassembling: continue from here
+    } else {
+      if (this.#inspecting) this.#finishClosing();
+      this.#inspecting = rig;
+    }
+    // Component labels give way to the one part label while inspecting.
+    for (const label of this.#labelObjects.values()) label.visible = false;
+    this.#frameNow(true);
+  }
+
+  /** Target separation in [0, 1]. Animated unless `animate` is false or motion is reduced. */
+  setExplodeAmount(amount: number, animate: boolean): void {
+    if (this.#inspecting === null || this.#closing) return;
+    this.#startExplode(Number.isFinite(amount) ? Math.min(1, Math.max(0, amount)) : 0, animate);
+  }
+
+  /** Highlights a part of the inspected component; unknown ids select nothing. */
+  setSelectedPart(partId: string | null): void {
+    const part = partId === null ? undefined : this.#inspecting?.component.getPart(partId);
+    this.#selectedPart = part ? part.id : null;
+    const info = part ? INSPECTIONS[this.#inspecting!.component.id as ComponentId]?.parts[part.id] : undefined;
+    this.#partLabel.textContent = info?.title ?? '';
+    this.#updatePartHighlight();
     this.#requestRender();
   }
 
@@ -544,6 +629,32 @@ export class MachineScene {
     this.#scene.add(this.#pulseTagObject);
   }
 
+  #buildInspection(): void {
+    for (const [id, inspection] of Object.entries(INSPECTIONS) as [ComponentId, (typeof INSPECTIONS)[ComponentId]][]) {
+      const component = this.#components.getComponent(id);
+      if (!component || !inspection) throw new Error(`Missing component for inspection "${id}"`);
+      this.#rigs.set(id, new ExplodeRig(component, inspection.plan));
+    }
+    // One reusable outline and one side label for the selected part. Neither
+    // touches part materials (the activity ring's material is live state).
+    this.#partHelper = new THREE.Box3Helper(this.#partBox, COLOR.accent);
+    const helperMaterial = this.#partHelper.material as THREE.LineBasicMaterial;
+    helperMaterial.depthTest = false;
+    helperMaterial.transparent = true;
+    helperMaterial.opacity = 0.9;
+    this.#partHelper.renderOrder = 10;
+    this.#partHelper.visible = false;
+    this.#scene.add(this.#partHelper);
+
+    this.#partLabel = document.createElement('div');
+    this.#partLabel.className = 'scene-label scene-label--part';
+    this.#partLabel.translate = false;
+    this.#partLabelObject = new CSS2DObject(this.#partLabel);
+    this.#partLabelObject.center.set(0, 0.5);
+    this.#partLabelObject.visible = false;
+    this.#scene.add(this.#partLabelObject);
+  }
+
   #registerComponent(component: MachineVisualComponent<ComponentId>): void {
     this.#components.register(component);
     this.#scene.add(component.root);
@@ -597,6 +708,7 @@ export class MachineScene {
     object.center.set(0.5, side === 'above' ? 1 : 0);
     object.position.copy(position);
     this.#labelElements.set(id, element);
+    this.#labelObjects.set(id, object);
     this.#labelAnchors.push({ position: position.clone(), side });
     this.#scene.add(object);
   }
@@ -611,8 +723,10 @@ export class MachineScene {
 
   #loop = (now: number): void => {
     this.#frame = 0;
+    const flying = this.#updateCamera(now);
     const moving = this.#controls.update();
-    const animating = this.#updateActivity(now);
+    const exploding = this.#updateInspection(now);
+    const animating = this.#updateActivity(now) || exploding || flying;
     this.#renderer.render(this.#scene, this.#camera);
     this.#labels.render(this.#scene, this.#camera);
     if (moving || animating) {
@@ -667,6 +781,93 @@ export class MachineScene {
     return active;
   }
 
+  /** Advances the separation tween. Every pose derives from rest + amount. */
+  #updateInspection(now: number): boolean {
+    const rig = this.#inspecting;
+    const tween = this.#explodeTween;
+    // The side label follows the camera's screen-right as the user orbits.
+    if (rig && this.#selectedPart !== null) this.#updatePartHighlight();
+    if (!rig || !tween) return false;
+    const k = tween.duration <= 0 ? 1 : Math.min(1, (now - tween.start) / tween.duration);
+    rig.apply(tween.from + (tween.to - tween.from) * k);
+    this.#updatePartHighlight();
+    if (k < 1) return true;
+    this.#explodeTween = null;
+    if (this.#closing && tween.to === 0) this.#finishClosing();
+    return false;
+  }
+
+  #startExplode(to: number, animate: boolean): void {
+    const rig = this.#inspecting;
+    if (!rig) return;
+    const from = rig.amount;
+    if (!animate || this.#reducedMotion || from === to) {
+      this.#explodeTween = null;
+      rig.apply(to);
+      this.#updatePartHighlight();
+      this.#requestRender();
+      return;
+    }
+    this.#explodeTween = { from, to, start: performance.now(), duration: EXPLODE_MS * Math.abs(to - from) };
+    this.#requestRender();
+  }
+
+  #finishClosing(): void {
+    const rig = this.#inspecting;
+    if (!rig) return;
+    rig.restore();
+    this.#explodeTween = null;
+    this.#inspecting = null;
+    this.#closing = false;
+    this.#selectedPart = null;
+    this.#updatePartHighlight();
+    // Leave no residue at all: the overlays return to their initial pose too.
+    // (Box3Helper keeps its last transform when its box is empty.)
+    this.#partBox.makeEmpty();
+    this.#partHelper.position.set(0, 0, 0);
+    this.#partHelper.scale.set(1, 1, 1);
+    this.#partLabelObject.position.set(0, 0, 0);
+    for (const label of this.#labelObjects.values()) label.visible = true;
+    this.#requestRender();
+  }
+
+  #updatePartHighlight(): void {
+    const rig = this.#inspecting;
+    const part = this.#selectedPart === null ? undefined : rig?.component.getPart(this.#selectedPart);
+    if (!part) {
+      this.#partHelper.visible = false;
+      this.#partLabelObject.visible = false;
+      return;
+    }
+    this.#partBox.makeEmpty();
+    for (const object of part.objects) this.#partBox.expandByObject(object);
+    this.#partBox.expandByScalar(0.025);
+    this.#partHelper.visible = true;
+    // Side label at the box's extreme along screen-right, so it sits beside
+    // the stack instead of over the layer above.
+    const right = new THREE.Vector3().setFromMatrixColumn(this.#camera.matrixWorld, 0).setY(0).normalize();
+    const center = this.#partBox.getCenter(new THREE.Vector3());
+    const half = this.#partBox.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    const reach = Math.abs(right.x) * half.x + Math.abs(right.z) * half.z;
+    this.#partLabelObject.position.copy(center).addScaledVector(right, reach + 0.08);
+    this.#partLabelObject.visible = true;
+  }
+
+  /** Advances a camera transition; returns true while it runs. */
+  #updateCamera(now: number): boolean {
+    const tween = this.#cameraTween;
+    if (!tween) return false;
+    const k = tween.duration <= 0 ? 1 : Math.min(1, (now - tween.start) / tween.duration);
+    const e = easeInOut(k);
+    this.#camera.position.lerpVectors(tween.fromPosition, tween.fit.position, e);
+    this.#controls.target.lerpVectors(tween.fromTarget, tween.fit.target, e);
+    if (k < 1) return true;
+    this.#cameraTween = null;
+    this.#applyDistanceLimits(tween.fit);
+    this.#controls.enabled = true;
+    return false;
+  }
+
   #showTransfer(transfer: Transfer, t: number): void {
     const lane = this.#ramLanes[1]!;
     const color = TRANSFER_COLOR[transfer.kind];
@@ -701,19 +902,65 @@ export class MachineScene {
     this.#renderer.setSize(width, height, false);
     this.#labels.setSize(width, height);
     this.#camera.aspect = width / height;
-    this.#frame3d(width, height);
+    this.#camera.updateProjectionMatrix();
+    // A running camera transition is retargeted, never cut short by a jump.
+    this.#applyFit(this.#fitView(width, height), this.#cameraTween !== null);
     this.#requestRender();
+  }
+
+  #frameNow(animate: boolean): void {
+    const width = Math.max(1, this.#container.clientWidth);
+    const height = Math.max(1, this.#container.clientHeight);
+    this.#applyFit(this.#fitView(width, height), animate || this.#cameraTween !== null);
+    this.#requestRender();
+  }
+
+  #applyFit(fit: FramingResult, animate: boolean): void {
+    this.#camera.zoom = 1;
+    this.#camera.updateProjectionMatrix();
+    if (animate && !this.#reducedMotion) {
+      // Distance limits are lifted for the flight, so OrbitControls cannot
+      // clamp an intermediate pose, and restored when it lands.
+      this.#controls.minDistance = 0;
+      this.#controls.maxDistance = Infinity;
+      this.#controls.enabled = false;
+      this.#cameraTween = {
+        fromPosition: this.#camera.position.clone(),
+        fromTarget: this.#controls.target.clone(),
+        fit,
+        start: performance.now(),
+        duration: CAMERA_MS,
+      };
+      return;
+    }
+    this.#cameraTween = null;
+    this.#controls.enabled = true;
+    this.#camera.position.copy(fit.position);
+    this.#controls.target.copy(fit.target);
+    this.#applyDistanceLimits(fit);
+    this.#controls.update();
+  }
+
+  #applyDistanceLimits(fit: FramingResult): void {
+    this.#controls.minDistance = fit.distance * 0.55;
+    this.#controls.maxDistance = fit.distance * 1.8;
   }
 
   /**
    * Fits the hardware (not the platform) into the viewport area left free by
    * overlays. Until the user orbits, the authored direction is used; after
    * that, a resize or rotation keeps the user's viewing angle and refits.
+   * During exploded inspection the fully exploded envelope of the inspected
+   * component is framed instead, once, so the separation slider never moves
+   * the camera.
    */
-  #frame3d(width: number, height: number): void {
-    const direction = this.#userOrbited
-      ? this.#camera.position.clone().sub(this.#controls.target).normalize()
-      : DEFAULT_VIEW_DIRECTION;
+  #fitView(width: number, height: number): FramingResult {
+    const goal = this.#cameraTween?.fit;
+    const direction = goal
+      ? goal.position.clone().sub(goal.target).normalize()
+      : this.#userOrbited || this.#inspecting
+        ? this.#camera.position.clone().sub(this.#controls.target).normalize()
+        : DEFAULT_VIEW_DIRECTION;
     const pad = 12; // breathing room in CSS px around the hardware
     const insets: FramingInsets = {
       top: (this.#insetsPx.top + pad) / height,
@@ -725,24 +972,19 @@ export class MachineScene {
     // direction removed. Label room is reserved along it, not along world Y.
     const worldUp = new THREE.Vector3(0, 1, 0);
     const screenUp = worldUp.clone().addScaledVector(direction, -worldUp.dot(direction)).normalize();
-    const labelPoints = this.#labelAnchors.flatMap(({ position, side }) => [
-      position,
-      position.clone().addScaledVector(screenUp, side === 'above' ? LABEL_ALLOWANCE : -LABEL_ALLOWANCE),
-    ]);
-    const fit = fitPointsToView({
-      points: [...this.#framingPoints, ...labelPoints],
-      direction,
-      fov: this.#camera.fov,
-      aspect: this.#camera.aspect,
-      insets,
-    });
-    this.#camera.zoom = 1;
-    this.#camera.position.copy(fit.position);
-    this.#controls.target.copy(fit.target);
-    this.#controls.minDistance = fit.distance * 0.55;
-    this.#controls.maxDistance = fit.distance * 1.8;
-    this.#camera.updateProjectionMatrix();
-    this.#controls.update();
+    let points: THREE.Vector3[];
+    if (this.#inspecting && !this.#closing) {
+      const envelope = boxCorners(this.#inspecting.envelope(1));
+      const screenRight = new THREE.Vector3().crossVectors(screenUp, direction).normalize();
+      points = [...envelope, ...envelope.map((p) => p.clone().addScaledVector(screenRight, PART_LABEL_ALLOWANCE))];
+    } else {
+      const labelPoints = this.#labelAnchors.flatMap(({ position, side }) => [
+        position,
+        position.clone().addScaledVector(screenUp, side === 'above' ? LABEL_ALLOWANCE : -LABEL_ALLOWANCE),
+      ]);
+      points = [...this.#framingPoints, ...labelPoints];
+    }
+    return fitPointsToView({ points, direction, fov: this.#camera.fov, aspect: this.#camera.aspect, insets });
   }
 
   #computeFramingPoints(): void {
@@ -758,7 +1000,7 @@ export class MachineScene {
     for (const footprint of this.#footprints.values()) {
       points.push(...boxCorners(new THREE.Box3().setFromObject(footprint)));
     }
-    // Label anchors are recorded by #addLabel; #frame3d reserves room beside
+    // Label anchors are recorded by #addLabel; #fitView reserves room beside
     // each one along the screen-up axis of the chosen view.
   }
 
@@ -776,23 +1018,50 @@ export class MachineScene {
     if (!down || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 6) {
       return; // orbit drag, not a click
     }
+    if (this.#inspecting && !this.#closing) {
+      this.#options.onSelectPart(this.#pickPart(event));
+      return;
+    }
     this.#options.onSelect(this.#pick(event));
   };
 
   #onPointerMove = (event: PointerEvent): void => {
     if (event.pointerType !== 'mouse' || event.buttons !== 0) return;
-    this.#renderer.domElement.style.cursor = this.#pick(event) ? 'pointer' : 'grab';
+    const hit = this.#inspecting && !this.#closing ? this.#pickPart(event) : this.#pick(event);
+    this.#renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
   };
 
   #pick(event: PointerEvent): ComponentId | null {
+    this.#aim(event);
+    const hit = this.#raycaster.intersectObjects(this.#hitTargets, false)[0];
+    return (hit?.object.userData.componentId as ComponentId | undefined) ?? null;
+  }
+
+  /**
+   * Part picking against the inspected component's real geometry only: the
+   * invisible component hit targets are not consulted, so they cannot
+   * intercept a part. The nearest hit wins, so hidden geometry is never
+   * selected. Hits resolve through the semantic ownership map; an instanced
+   * set resolves to its one part, whatever instance was hit.
+   */
+  #pickPart(event: PointerEvent): string | null {
+    const component = this.#inspecting?.component;
+    if (!component) return null;
+    this.#aim(event);
+    for (const hit of this.#raycaster.intersectObject(component.root, true)) {
+      const part = component.partOf(hit.object);
+      if (part) return part.id;
+    }
+    return null;
+  }
+
+  #aim(event: PointerEvent): void {
     const rect = this.#renderer.domElement.getBoundingClientRect();
     this.#pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.#raycaster.setFromCamera(this.#pointer, this.#camera);
-    const hit = this.#raycaster.intersectObjects(this.#hitTargets, false)[0];
-    return (hit?.object.userData.componentId as ComponentId | undefined) ?? null;
   }
 }
 

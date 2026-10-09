@@ -140,6 +140,9 @@ describe('ExplodeRig on the Pexis Compute module', () => {
     expect([...build.component.parts.keys()].sort()).toEqual(planned);
     expect(COMPUTE_INSPECTION.parts['activity-ring']!.representation).toBe('observation');
     for (const [id, info] of Object.entries(COMPUTE_INSPECTION.parts)) {
+      expect(info.role, id).toBe(build.component.getPart(id)!.role);
+    }
+    for (const [id, info] of Object.entries(COMPUTE_INSPECTION.parts)) {
       if (id !== 'activity-ring') expect(info.representation, id).toBe('illustrative');
     }
   });

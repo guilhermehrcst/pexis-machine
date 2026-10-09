@@ -10,6 +10,8 @@ export type PartRepresentation = 'illustrative' | 'observation';
 
 export interface PartInspection {
   readonly title: string;
+  /** The part's semantic role, from the component contract. */
+  readonly role: string;
   readonly summary: string;
   readonly relation: string;
   readonly representation: PartRepresentation;

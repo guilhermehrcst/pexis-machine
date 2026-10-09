@@ -1,7 +1,10 @@
 import { Cross2Icon } from '@radix-ui/react-icons';
 import { STATUS_LABEL, byteCount, bytesHuman, decimal, hexAddress } from '../machine/format';
 import type { LabReady } from '../machine/useMachineLab';
+import { REPRESENTATION_LABEL, type ComponentInspection } from '../scene/inspection';
+import { inspectionFor } from '../scene/inspections';
 import type { ComponentId } from '../scene/transfers';
+import type { InspectionState } from './inspectionState';
 
 const COMPONENTS: ReadonlyArray<{ id: ComponentId; label: string }> = [
   { id: 'cpu', label: 'CPU' },
@@ -14,6 +17,10 @@ interface InspectorProps {
   readonly lab: LabReady;
   readonly selected: ComponentId | null;
   readonly onSelect: (id: ComponentId | null) => void;
+  readonly inspection: InspectionState | null;
+  readonly onInspect: (update: (current: InspectionState | null) => InspectionState | null) => void;
+  /** Where the part inspector goes: over the stage (wide) or below it (narrow, rendered by the caller). */
+  readonly partsLayout: 'overlay' | 'below';
   readonly width: number;
 }
 
@@ -28,9 +35,11 @@ function Row({ label, value }: { readonly label: string; readonly value: string 
   );
 }
 
-export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
+export function Inspector({ lab, selected, onSelect, inspection, onInspect, partsLayout, width }: InspectorProps) {
   const { snapshot, client } = lab;
   const t = snapshot.telemetry;
+  const inspectable = inspectionFor(selected);
+  const active = inspection !== null && inspectable !== null && inspection.component === inspectable.componentId;
 
   return (
     <div className="inspector">
@@ -48,7 +57,14 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
         ))}
       </div>
 
-      {selected ? (
+      {active ? (
+        <>
+          {partsLayout === 'overlay' ? (
+            <PartInspector inspectable={inspectable} inspection={inspection} onInspect={onInspect} />
+          ) : null}
+          <ExplodeBar inspection={inspection} onInspect={onInspect} />
+        </>
+      ) : selected ? (
         <div className="inspector__card" aria-live="polite">
           <div className="inspector__head">
             <h3 translate="no">{COMPONENTS.find((c) => c.id === selected)?.label}</h3>
@@ -66,6 +82,15 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
               <Row label="Retired" value={decimal(t.instructionsRetired)} />
               <Row label="Cycles (abstract)" value={decimal(t.cycles)} />
             </dl>
+          ) : null}
+          {inspectable ? (
+            <button
+              type="button"
+              className="button button--small inspector__inspect"
+              onClick={() => onInspect(() => ({ component: inspectable.componentId, part: null, amount: 1, animate: true }))}
+            >
+              Inspect parts
+            </button>
           ) : null}
           {selected === 'ram' ? (
             <dl>
@@ -95,6 +120,89 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export interface PartInspectorProps {
+  readonly inspectable: ComponentInspection;
+  readonly inspection: InspectionState;
+  readonly onInspect: InspectorProps['onInspect'];
+}
+
+/**
+ * Inspector of one part of an exploded component. Every statement comes from
+ * the component's inspection record; it says what the geometry is and what the
+ * core really simulates, and never attributes capabilities the core lacks.
+ */
+export function PartInspector({ inspectable, inspection, onInspect }: PartInspectorProps) {
+  const partId = inspection.part;
+  const info = partId === null ? undefined : inspectable.parts[partId];
+  const pick = (part: string | null) => onInspect((current) => (current ? { ...current, part } : current));
+  return (
+    <div className="inspector__card inspector__card--parts" aria-live="polite">
+      <div className="inspector__head">
+        <h3 translate="no">{inspectable.title} · parts</h3>
+        <button type="button" className="icon-button icon-button--small" onClick={() => onInspect(() => null)} aria-label="Close exploded view">
+          <Cross2Icon aria-hidden="true" />
+        </button>
+      </div>
+      <div className="part-list" role="group" aria-label="Parts" translate="no">
+        {inspectable.plan.steps.map(({ partId: id }) => (
+          <button
+            key={id}
+            type="button"
+            className={id === partId ? 'part-chip is-active' : 'part-chip'}
+            aria-pressed={id === partId}
+            onClick={() => pick(id === partId ? null : id)}
+          >
+            {inspectable.parts[id]!.title}
+          </button>
+        ))}
+      </div>
+      {info && partId !== null ? (
+        <>
+          <dl>
+            <Row label="Part" value={`${inspectable.componentId}/${partId}`} />
+            <Row label="Role" value={info.role} />
+          </dl>
+          <p className={`part-nature part-nature--${info.representation}`}>{REPRESENTATION_LABEL[info.representation]}</p>
+          <p className="part-text">{info.summary}</p>
+          <p className="part-text part-text--muted">{info.relation}</p>
+        </>
+      ) : (
+        <p className="part-text part-text--muted">Tap a part, or choose one above.</p>
+      )}
+      <p className="part-text part-text--simulated">{inspectable.simulated}</p>
+    </div>
+  );
+}
+
+function ExplodeBar({ inspection, onInspect }: { readonly inspection: InspectionState; readonly onInspect: InspectorProps['onInspect'] }) {
+  const percent = Math.round(inspection.amount * 100);
+  const exploded = inspection.amount >= 0.5;
+  const set = (amount: number, animate: boolean) =>
+    onInspect((current) => (current ? { ...current, amount, animate } : current));
+  return (
+    <div className="explode-bar" role="group" aria-label="Exploded view">
+      <label className="explode-bar__slider">
+        <span>Separation</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={percent}
+          aria-valuetext={`${percent}%`}
+          onChange={(event) => set(Number(event.currentTarget.value) / 100, false)}
+        />
+      </label>
+      <button type="button" className="button button--small" onClick={() => set(exploded ? 0 : 1, true)}>
+        <span key={exploded ? 'assemble' : 'explode'}>{exploded ? 'Assemble' : 'Explode'}</span>
+      </button>
+      <button type="button" className="button button--small button--primary" onClick={() => onInspect(() => null)}>
+        Done
+      </button>
     </div>
   );
 }

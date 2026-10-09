@@ -4,7 +4,10 @@ import type { LabCommands, LabReady } from '../machine/useMachineLab';
 import type { ComponentId } from '../scene/transfers';
 import { ActivityTimeline } from './ActivityTimeline';
 import { EventsPanel } from './EventsPanel';
-import { Inspector } from './Inspector';
+import { useEffect, useRef, useState } from 'react';
+import { inspectionFor } from '../scene/inspections';
+import { Inspector, PartInspector } from './Inspector';
+import type { InspectionState } from './inspectionState';
 import { MemoryPanel } from './MemoryPanel';
 import { ProgramPanel } from './ProgramPanel';
 import { RegistersPanel } from './RegistersPanel';
@@ -18,23 +21,67 @@ interface MachineViewProps {
   readonly lab: LabReady;
   readonly selected: ComponentId | null;
   readonly onSelect: (id: ComponentId | null) => void;
+  readonly inspection: InspectionState | null;
+  readonly onInspect: (update: (current: InspectionState | null) => InspectionState | null) => void;
   readonly reducedMotion: boolean;
   readonly width: number;
 }
 
-export function MachineView({ lab, selected, onSelect, reducedMotion, width }: MachineViewProps) {
+// Below this stage width the part inspector would cover the exploded module,
+// so it moves below the stage instead of over it.
+const PARTS_OVERLAY_MIN_WIDTH = 600;
+
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    observer.observe(element);
+    setWidth(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+export function MachineView({ lab, selected, onSelect, inspection, onInspect, reducedMotion, width }: MachineViewProps) {
+  const [stageRef, stageWidth] = useWidth<HTMLElement>();
+  const partsLayout = stageWidth >= PARTS_OVERLAY_MIN_WIDTH ? 'overlay' : 'below';
+  const inspectable = inspection ? inspectionFor(inspection.component) : null;
   return (
     <div className="workspace">
-      <section className="stage" aria-label="Machine">
+      <section className="stage" aria-label="Machine" ref={stageRef}>
         <div className="stage__viewport">
-          <SceneView lab={lab} selected={selected} onSelect={onSelect} reducedMotion={reducedMotion} />
-          <Inspector lab={lab} selected={selected} onSelect={onSelect} width={width} />
+          <SceneView
+            lab={lab}
+            selected={selected}
+            onSelect={onSelect}
+            inspection={inspection}
+            onSelectPart={(part) => onInspect((current) => (current ? { ...current, part } : current))}
+            partsLayout={partsLayout}
+            reducedMotion={reducedMotion}
+          />
+          <Inspector
+            lab={lab}
+            selected={selected}
+            onSelect={onSelect}
+            inspection={inspection}
+            onInspect={onInspect}
+            partsLayout={partsLayout}
+            width={width}
+          />
           <div className="stage__legend" aria-hidden="true">
             <span className="legend__item legend__item--fetch">instruction fetch</span>
             <span className="legend__item legend__item--read">load · RAM → CPU</span>
             <span className="legend__item legend__item--write">store · CPU → RAM</span>
           </div>
         </div>
+        {inspection && inspectable && partsLayout === 'below' ? (
+          <div className="stage__parts">
+            <PartInspector inspectable={inspectable} inspection={inspection} onInspect={onInspect} />
+          </div>
+        ) : null}
         <ActivityTimeline lab={lab} width={width} />
       </section>
       <div className="rail">
