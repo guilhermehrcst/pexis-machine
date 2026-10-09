@@ -25,6 +25,12 @@ export interface MachineVisualComponent<Id extends string = string> {
   readonly root: THREE.Group;
   readonly parts: ReadonlyMap<string, MachineVisualPart>;
   getPart(id: string): MachineVisualPart | undefined;
+  /**
+   * The part that claims a renderable, from the ownership validated at
+   * construction. Picking resolves hits through this, never through mesh names.
+   * Non-renderables and objects outside the component return undefined.
+   */
+  partOf(object: THREE.Object3D): MachineVisualPart | undefined;
 }
 
 export interface MachineVisualPartDefinition {
@@ -124,6 +130,10 @@ export function createVisualComponent<Id extends string>(
     root: definition.root,
     parts,
     getPart: (id: string) => parts.get(id),
+    partOf: (object: THREE.Object3D) => {
+      const partId = claimed.get(object);
+      return partId === undefined ? undefined : parts.get(partId);
+    },
   };
 }
 
