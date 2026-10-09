@@ -1,0 +1,29 @@
+PASS  tap selects CPU  — CPU
+PASS  camera does not jump on CPU selection  — 0.00e+0
+PASS  tap selects RAM  — RAM
+PASS  camera does not jump on RAM selection  — 0.00e+0
+PASS  tap selects Fabric  — Fabric
+PASS  camera does not jump on Fabric selection  — 0.00e+0
+PASS  tap selects GPU  — GPU
+PASS  camera does not jump on GPU selection  — 0.00e+0
+PASS  idle after selection changes
+PASS  transfer pulse animated from real events  — 18
+PASS  pulse never enters the planned corridor (x > 0)  — -0.450
+PASS  planned GPU route never changes appearance  — ["0.45:1","0.42:0"]
+PASS  halted
+PASS  idle after animations end
+PASS  orbit inertia converges and rendering stops
+PASS  touch orbit changed view
+PASS  resize 820x1180: user angle preserved  — 0.013°
+PASS  resize 820x1180: hardware inside viewport  — 0.768
+PASS  resize 1180x820: user angle preserved  — 0.020°
+PASS  resize 1180x820: hardware inside viewport  — 0.771
+PASS  resize 390x844: user angle preserved  — 0.027°
+PASS  resize 390x844: hardware inside viewport  — 0.864
+PASS  resize 1440x900: user angle preserved  — 0.034°
+PASS  resize 1440x900: hardware inside viewport  — 0.775
+PASS  wheel zoom moves camera closer within limits  — {"d0":14.52,"dz":10.68,"min":7.99}
+PASS  idle after orbit/zoom settle
+PASS  remount leaves exactly one scene  — {"canvases":1,"labels":4,"tags":1,"layers":1}
+PASS  no console errors or warnings  — []
+28/28 gate checks passed

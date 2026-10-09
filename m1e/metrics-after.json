@@ -1,0 +1,468 @@
+{
+ "desktop-1440x900": {
+  "stage": {
+   "w": 754,
+   "h": 505
+  },
+  "labels": {
+   "CPU": {
+    "x": 349,
+    "y": 81,
+    "w": 186,
+    "h": 40,
+    "inside": true
+   },
+   "RAM": {
+    "x": 50,
+    "y": 128,
+    "w": 169,
+    "h": 40,
+    "inside": true
+   },
+   "GPU": {
+    "x": 580,
+    "y": 285,
+    "w": 89,
+    "h": 40,
+    "inside": true
+   },
+   "Fabric": {
+    "x": 271,
+    "y": 319,
+    "w": 162,
+    "h": 40,
+    "inside": true
+   }
+  },
+  "labelOverlaps": [],
+  "hOverflow": 0,
+  "badge": "C++ core · WebAssembly",
+  "bounds": {
+   "PexisComputeModule": [
+    -0.149,
+    0.058,
+    0.365,
+    0.483
+   ],
+   "PexisMemoryModule": [
+    -0.927,
+    -0.118,
+    -0.339,
+    0.345
+   ],
+   "PexisFabric": [
+    -0.369,
+    -0.314,
+    0.336,
+    0.163
+   ],
+   "platform": [
+    -2.938,
+    -4.429,
+    4.22,
+    1.019
+   ],
+   "gpuPlanned": [
+    0.352,
+    -0.649,
+    0.933,
+    -0.078
+   ]
+  },
+  "renderables": 30,
+  "geometries": 30,
+  "materials": 30,
+  "lights": 3,
+  "shadowCasters": 10,
+  "camera": [
+   2.463,
+   6.199,
+   8.847
+  ],
+  "lastFrame": {
+   "drawCalls": 38,
+   "triangles": 27650
+  },
+  "gpuObjectsCreated": {
+   "buffers": 115,
+   "programs": 12,
+   "textures": 6
+  },
+  "idleFramesIn1500ms": 0,
+  "idleFramesAfterOrbit": 5,
+  "errors": []
+ },
+ "tablet-1180x820": {
+  "stage": {
+   "w": 721,
+   "h": 489
+  },
+  "labels": {
+   "CPU": {
+    "x": 330,
+    "y": 84,
+    "w": 186,
+    "h": 40,
+    "inside": true
+   },
+   "RAM": {
+    "x": 45,
+    "y": 130,
+    "w": 169,
+    "h": 40,
+    "inside": true
+   },
+   "GPU": {
+    "x": 553,
+    "y": 280,
+    "w": 89,
+    "h": 40,
+    "inside": true
+   },
+   "Fabric": {
+    "x": 256,
+    "y": 314,
+    "w": 162,
+    "h": 40,
+    "inside": true
+   }
+  },
+  "labelOverlaps": [],
+  "hOverflow": 0,
+  "badge": "C++ core · WebAssembly",
+  "bounds": {
+   "PexisComputeModule": [
+    -0.147,
+    0.035,
+    0.367,
+    0.459
+   ],
+   "PexisMemoryModule": [
+    -0.926,
+    -0.14,
+    -0.337,
+    0.318
+   ],
+   "PexisFabric": [
+    -0.367,
+    -0.335,
+    0.338,
+    0.14
+   ],
+   "platform": [
+    -2.924,
+    -4.34,
+    4.132,
+    0.999
+   ],
+   "gpuPlanned": [
+    0.353,
+    -0.667,
+    0.932,
+    -0.101
+   ]
+  },
+  "renderables": 30,
+  "geometries": 30,
+  "materials": 30,
+  "lights": 3,
+  "shadowCasters": 10,
+  "camera": [
+   2.477,
+   6.334,
+   8.915
+  ],
+  "lastFrame": {
+   "drawCalls": 38,
+   "triangles": 27650
+  },
+  "gpuObjectsCreated": {
+   "buffers": 115,
+   "programs": 12,
+   "textures": 6
+  },
+  "idleFramesIn1500ms": 0,
+  "idleFramesAfterOrbit": 7,
+  "errors": []
+ },
+ "tablet-1024x768": {
+  "stage": {
+   "w": 907,
+   "h": 568
+  },
+  "labels": {
+   "CPU": {
+    "x": 435,
+    "y": 88,
+    "w": 186,
+    "h": 40,
+    "inside": true
+   },
+   "RAM": {
+    "x": 74,
+    "y": 142,
+    "w": 169,
+    "h": 40,
+    "inside": true
+   },
+   "GPU": {
+    "x": 705,
+    "y": 331,
+    "w": 89,
+    "h": 40,
+    "inside": true
+   },
+   "Fabric": {
+    "x": 338,
+    "y": 364,
+    "w": 162,
+    "h": 40,
+    "inside": true
+   }
+  },
+  "labelOverlaps": [],
+  "hOverflow": 0,
+  "badge": "C++ core · WebAssembly",
+  "bounds": {
+   "PexisComputeModule": [
+    -0.155,
+    0.061,
+    0.353,
+    0.509
+   ],
+   "PexisMemoryModule": [
+    -0.935,
+    -0.126,
+    -0.347,
+    0.369
+   ],
+   "PexisFabric": [
+    -0.377,
+    -0.338,
+    0.329,
+    0.173
+   ],
+   "platform": [
+    -3.002,
+    -5.359,
+    4.748,
+    1.058
+   ],
+   "gpuPlanned": [
+    0.346,
+    -0.704,
+    0.937,
+    -0.084
+   ]
+  },
+  "renderables": 30,
+  "geometries": 30,
+  "materials": 30,
+  "lights": 3,
+  "shadowCasters": 10,
+  "camera": [
+   2.339,
+   5.814,
+   8.315
+  ],
+  "lastFrame": {
+   "drawCalls": 38,
+   "triangles": 27650
+  },
+  "gpuObjectsCreated": {
+   "buffers": 115,
+   "programs": 12,
+   "textures": 6
+  },
+  "idleFramesIn1500ms": 0,
+  "idleFramesAfterOrbit": 4,
+  "errors": []
+ },
+ "tablet-820x1180": {
+  "stage": {
+   "w": 703,
+   "h": 480
+  },
+  "labels": {
+   "CPU": {
+    "x": 320,
+    "y": 83,
+    "w": 186,
+    "h": 40,
+    "inside": true
+   },
+   "RAM": {
+    "x": 42,
+    "y": 128,
+    "w": 169,
+    "h": 40,
+    "inside": true
+   },
+   "GPU": {
+    "x": 538,
+    "y": 274,
+    "w": 89,
+    "h": 40,
+    "inside": true
+   },
+   "Fabric": {
+    "x": 248,
+    "y": 308,
+    "w": 162,
+    "h": 40,
+    "inside": true
+   }
+  },
+  "labelOverlaps": [],
+  "hOverflow": 0,
+  "badge": "C++ core · WebAssembly",
+  "bounds": {
+   "PexisComputeModule": [
+    -0.147,
+    0.032,
+    0.368,
+    0.455
+   ],
+   "PexisMemoryModule": [
+    -0.924,
+    -0.141,
+    -0.337,
+    0.313
+   ],
+   "PexisFabric": [
+    -0.366,
+    -0.335,
+    0.338,
+    0.137
+   ],
+   "platform": [
+    -2.917,
+    -4.268,
+    4.087,
+    0.993
+   ],
+   "gpuPlanned": [
+    0.353,
+    -0.665,
+    0.931,
+    -0.103
+   ]
+  },
+  "renderables": 30,
+  "geometries": 30,
+  "materials": 30,
+  "lights": 3,
+  "shadowCasters": 10,
+  "camera": [
+   2.49,
+   6.382,
+   8.97
+  ],
+  "lastFrame": {
+   "drawCalls": 38,
+   "triangles": 27650
+  },
+  "gpuObjectsCreated": {
+   "buffers": 115,
+   "programs": 12,
+   "textures": 6
+  },
+  "idleFramesIn1500ms": 0,
+  "idleFramesAfterOrbit": 6,
+  "errors": []
+ },
+ "mobile-390x844": {
+  "stage": {
+   "w": 364,
+   "h": 310
+  },
+  "labels": {
+   "CPU": {
+    "x": 196,
+    "y": 94,
+    "w": 42,
+    "h": 20,
+    "inside": true
+   },
+   "RAM": {
+    "x": 50,
+    "y": 123,
+    "w": 44,
+    "h": 20,
+    "inside": true
+   },
+   "GPU": {
+    "x": 277,
+    "y": 198,
+    "w": 42,
+    "h": 20,
+    "inside": true
+   },
+   "Fabric": {
+    "x": 147,
+    "y": 215,
+    "w": 53,
+    "h": 20,
+    "inside": true
+   }
+  },
+  "labelOverlaps": [],
+  "hOverflow": 0,
+  "badge": "C++ core · WebAssembly",
+  "bounds": {
+   "PexisComputeModule": [
+    -0.133,
+    -0.129,
+    0.384,
+    0.237
+   ],
+   "PexisMemoryModule": [
+    -0.888,
+    -0.273,
+    -0.315,
+    0.085
+   ],
+   "PexisFabric": [
+    -0.342,
+    -0.429,
+    0.34,
+    -0.041
+   ],
+   "platform": [
+    -2.671,
+    -2.776,
+    2.971,
+    0.755
+   ],
+   "gpuPlanned": [
+    0.349,
+    -0.683,
+    0.902,
+    -0.244
+   ]
+  },
+  "renderables": 30,
+  "geometries": 30,
+  "materials": 30,
+  "lights": 3,
+  "shadowCasters": 10,
+  "camera": [
+   3.034,
+   8.603,
+   10.955
+  ],
+  "lastFrame": {
+   "drawCalls": 38,
+   "triangles": 27650
+  },
+  "gpuObjectsCreated": {
+   "buffers": 115,
+   "programs": 12,
+   "textures": 6
+  },
+  "idleFramesIn1500ms": 0,
+  "idleFramesAfterOrbit": 14,
+  "errors": []
+ },
+ "haltedStatus": "Halted"
+}
