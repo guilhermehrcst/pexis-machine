@@ -1,0 +1,29 @@
+PASS  Run while inspecting: the core runs to HALT (not paused)  — Halted
+PASS  Run while inspecting: registers and telemetry identical to a plain run
+PASS  Run while inspecting: parts keep their exploded pose  — 1.4889999999999999
+PASS  activity ring shows real status while separated (halted green)  — 2f9e6b
+PASS  no console errors (run while inspecting)  — []
+PASS  camera does not move while the separation changes
+PASS  same separation, same pose (history-independent)  — 0.7017091599999998
+PASS  rendering stops after separation changes
+PASS  keyboard selects a part
+PASS  slider responds to arrow keys  — 37→38
+PASS  tap on empty space clears the part, CPU stays selected
+PASS  Escape leaves the exploded view
+PASS  no WebGL buffers/programs/textures created per inspection cycle  — {"after1":[118,14,6],"after5":[118,14,6]}
+PASS  pose identical after five cycles
+PASS  interrupted transitions still restore the exact pose
+PASS  controls re-enabled with finite limits after transitions  — {"enabled":true,"min":6.069739378809409,"max":19.864601603376247}
+PASS  component selection works after inspection
+PASS  no console errors (cycles)  — []
+PASS  reduced motion: fully separated immediately  — 1.4889999999999999
+PASS  reduced motion: rendering at rest
+PASS  reduced motion: reassembled immediately
+PASS  focus moves into the part inspector
+PASS  Escape works with the slider focused
+PASS  focus returns to "Inspect parts"
+PASS  a part hidden behind RAM cannot be picked
+PASS  the same part with a clear view is picked
+PASS  no orbit inertia after the camera flight lands  — 0.00e+0
+PASS  no console errors (review fixes)  — []
+28/28 M1G gate checks passed

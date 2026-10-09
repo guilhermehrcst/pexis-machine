@@ -1,0 +1,5 @@
+1440x900 inspect+part: drawCalls 38 triangles 27638 · exploded module max |NDC| 0.595
+1180x820 inspect+part: drawCalls 38 triangles 27638 · exploded module max |NDC| 0.575
+1024x768 inspect+part: drawCalls 37 triangles 26438 · exploded module max |NDC| 0.698
+820x1180 inspect+part: drawCalls 38 triangles 27638 · exploded module max |NDC| 0.581
+390x844 inspect+part: drawCalls 38 triangles 27638 · exploded module max |NDC| 0.576

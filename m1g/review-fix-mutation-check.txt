@@ -1,0 +1,10 @@
+pre-fix cb44d14: FAIL  a part hidden behind RAM cannot be picked
+pre-fix cb44d14: PASS  the same part with a clear view is picked
+pre-fix cb44d14: FAIL  no orbit inertia after the camera flight lands  — 9.98e-1
+pre-fix cb44d14: PASS  no console errors (review fixes)  — []
+pre-fix cb44d14: 2/4
+fixed: PASS  a part hidden behind RAM cannot be picked
+fixed: PASS  the same part with a clear view is picked
+fixed: PASS  no orbit inertia after the camera flight lands  — 0.00e+0
+fixed: PASS  no console errors (review fixes)  — []
+fixed: 4/4
