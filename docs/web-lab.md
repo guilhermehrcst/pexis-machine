@@ -50,6 +50,23 @@ See `docs/visual-architecture.md`.
 The GPU is drawn as an inert dashed outline labeled *Planned · M4*. It has no state, metrics, or activity, and the
 GPU Vector Add experiment is shown disabled.
 
+Labels sit on a declared side of their anchor (`above` for standing hardware, `below` for the flat Fabric in front of
+the compute package), so no label covers the hardware it names or the live transfer tag.
+
+## Machine translation
+
+The Web Lab is written in English and stays translatable. Machine state must stay truthful on a translated page, so
+two independent barriers apply (M1E):
+
+- identifiers and machine data opt out with `translate="no"`: component and product names, status labels, register,
+  telemetry, program, memory and event values, the `Loads`/`Stores` counter terms, 3D labels and the transfer tag;
+- prose that changes with state (core badge, Run/Pause, Load/Reload, panel meta lines) is rendered as a keyed
+  element, so a state change replaces the element instead of writing to a text node a translator has detached.
+
+Without the second barrier a translated page kept showing *Loading core…* on a ready machine, and the status pill kept
+a translated *Ready* after the core halted. `src/ui/translation.test.ts` guards both barriers. Behaviour under real
+Safari translation still needs a check on a physical device.
+
 ## Accessibility
 
 Everything is operable without the 3D view: toolbar buttons, component inspector buttons, panels and keyboard
