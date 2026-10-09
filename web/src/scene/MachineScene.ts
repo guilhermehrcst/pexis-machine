@@ -137,8 +137,10 @@ export class MachineScene {
     this.#renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 1.05;
+    // Khronos PBR Neutral keeps authored albedo: graphite stays graphite and
+    // the platform stays off-white instead of ACES's grey, desaturated wash.
+    this.#renderer.toneMapping = THREE.NeutralToneMapping;
+    this.#renderer.toneMappingExposure = 1;
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.#renderer.domElement.className = 'scene-canvas';
