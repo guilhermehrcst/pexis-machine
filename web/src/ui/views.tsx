@@ -77,7 +77,8 @@ export function OverviewView({ lab, onOpenMachine }: { readonly lab: LabReady; r
         <section className="card">
           <h2>Live machine</h2>
           <p>
-            {experiment?.title ?? 'No experiment'} · <strong>{STATUS_LABEL[lab.snapshot.status]}</strong>
+            <span key={experiment?.id ?? 'none'}>{experiment?.title ?? 'No experiment'}</span> ·{' '}
+            <strong translate="no">{STATUS_LABEL[lab.snapshot.status]}</strong>
           </p>
           <button type="button" className="button button--primary" onClick={onOpenMachine}>
             Open machine <ArrowRightIcon aria-hidden="true" />
@@ -127,7 +128,10 @@ export function ExperimentsView({
                 onOpenMachine();
               }}
             >
-              {experiment.id === lab.experimentId ? 'Reload' : 'Load'} <ArrowRightIcon aria-hidden="true" />
+              <span key={experiment.id === lab.experimentId ? 'reload' : 'load'}>
+                {experiment.id === lab.experimentId ? 'Reload' : 'Load'}
+              </span>{' '}
+              <ArrowRightIcon aria-hidden="true" />
             </button>
           </li>
         ))}
@@ -166,8 +170,12 @@ export function TelemetryView({ lab }: { readonly lab: LabReady }) {
           <tbody>
             {METRICS.map((spec) => (
               <tr key={spec.key}>
-                <th scope="row">{spec.label}</th>
-                <td className="mono">{formatMetric(spec, lab.snapshot.telemetry)}</td>
+                <th scope="row" translate={spec.term ? 'no' : undefined}>
+                  {spec.label}
+                </th>
+                <td className="mono" translate="no">
+                  {formatMetric(spec, lab.snapshot.telemetry)}
+                </td>
                 <td>{spec.definition}</td>
               </tr>
             ))}

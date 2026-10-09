@@ -25,19 +25,22 @@ interface NavItem {
   readonly icon: ComponentType<{ 'aria-hidden'?: boolean }>;
   readonly target: NavTarget;
   readonly badge?: string;
+  /** A technical identifier (CPU, GPU, Fabric): never machine-translated. */
+  readonly term?: boolean;
 }
 
 const ITEMS: readonly NavItem[] = [
   { key: 'overview', label: 'Overview', icon: DashboardIcon, target: { view: 'overview' } },
   { key: 'machine', label: 'Machine', icon: CubeIcon, target: { view: 'machine' } },
-  { key: 'cpu', label: 'CPU', icon: ComponentInstanceIcon, target: { view: 'machine', focus: 'cpu' } },
+  { key: 'cpu', label: 'CPU', icon: ComponentInstanceIcon, target: { view: 'machine', focus: 'cpu' }, term: true },
   { key: 'memory', label: 'Memory', icon: StackIcon, target: { view: 'machine', focus: 'ram' } },
-  { key: 'gpu', label: 'GPU', icon: LayersIcon, target: { view: 'machine', focus: 'gpu' }, badge: 'Planned' },
+  { key: 'gpu', label: 'GPU', icon: LayersIcon, target: { view: 'machine', focus: 'gpu' }, badge: 'Planned', term: true },
   {
     key: 'interconnect',
     label: 'Fabric',
     icon: Share2Icon,
     target: { view: 'machine', focus: 'interconnect' },
+    term: true,
   },
   { key: 'experiments', label: 'Experiments', icon: MixIcon, target: { view: 'experiments' } },
   { key: 'telemetry', label: 'Telemetry', icon: BarChartIcon, target: { view: 'telemetry' } },
@@ -72,7 +75,9 @@ export function Sidebar({ view, selected, open, onNavigate, onClose, coreReady }
             <span />
           </span>
           <span className="brand__text">
-            <span className="brand__name">Pexis Machine</span>
+            <span className="brand__name" translate="no">
+              Pexis Machine
+            </span>
             <span className="brand__sub">Architecture Lab</span>
           </span>
         </div>
@@ -91,7 +96,9 @@ export function Sidebar({ view, selected, open, onNavigate, onClose, coreReady }
                   title={item.label}
                 >
                   <Icon aria-hidden />
-                  <span className="nav__label">{item.label}</span>
+                  <span className="nav__label" translate={item.term ? 'no' : undefined}>
+                    {item.label}
+                  </span>
                   {item.badge ? <span className="nav__badge">{item.badge}</span> : null}
                 </button>
               </li>
@@ -106,7 +113,17 @@ export function Sidebar({ view, selected, open, onNavigate, onClose, coreReady }
           </div>
           <div className={coreReady ? 'core-badge is-ready' : 'core-badge'}>
             <span className="core-badge__dot" aria-hidden="true" />
-            {coreReady ? 'C++ core · WebAssembly' : 'Loading core…'}
+            {/* Keyed so the state change replaces the element. Updating the
+                text node in place freezes on a translated page: translators
+                swap text nodes for their own, React then writes to a
+                detached node, and "Loading core…" stays on screen. */}
+            {coreReady ? (
+              <span key="ready" translate="no">
+                C++ core · WebAssembly
+              </span>
+            ) : (
+              <span key="loading">Loading core…</span>
+            )}
           </div>
         </div>
       </nav>

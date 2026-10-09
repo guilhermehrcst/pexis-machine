@@ -41,12 +41,12 @@ export function ProgramPanel({ lab, width }: { readonly lab: LabReady; readonly 
       title="Program"
       id="program"
       className="panel--program"
-      meta={program ? <span>{program.length} B · decoded from RAM</span> : null}
+      meta={program ? <span key={program.length}>{program.length} B · decoded from RAM</span> : null}
     >
       {program === null ? (
         <p className="empty">No program loaded.</p>
       ) : (
-        <ol className="listing" aria-label="Loaded program">
+        <ol className="listing" aria-label="Loaded program" translate="no">
           {program.instructions.map((line, index) => {
             const state = stateOf(line);
             return (

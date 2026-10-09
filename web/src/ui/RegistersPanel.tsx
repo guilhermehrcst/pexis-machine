@@ -12,7 +12,7 @@ export function RegistersPanel({ lab, width }: { readonly lab: LabReady; readonl
 
   return (
     <Panel title="Registers" id="registers" meta={<span>64-bit · from snapshot</span>}>
-      <table className="regs">
+      <table className="regs" translate="no">
         <caption className="visually-hidden">Program counter and general-purpose registers</caption>
         <thead className="visually-hidden">
           <tr>

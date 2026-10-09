@@ -21,7 +21,9 @@ function Row({ label, value }: { readonly label: string; readonly value: string 
   return (
     <div className="inspector__row">
       <dt>{label}</dt>
-      <dd className="mono">{value}</dd>
+      <dd className="mono" translate="no">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -32,7 +34,7 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
 
   return (
     <div className="inspector">
-      <div className="segmented" role="group" aria-label="Inspect component">
+      <div className="segmented" role="group" aria-label="Inspect component" translate="no">
         {COMPONENTS.map((component) => (
           <button
             key={component.id}
@@ -49,7 +51,7 @@ export function Inspector({ lab, selected, onSelect, width }: InspectorProps) {
       {selected ? (
         <div className="inspector__card" aria-live="polite">
           <div className="inspector__head">
-            <h3>{COMPONENTS.find((c) => c.id === selected)?.label}</h3>
+            <h3 translate="no">{COMPONENTS.find((c) => c.id === selected)?.label}</h3>
             <button type="button" className="icon-button icon-button--small" onClick={() => onSelect(null)} aria-label="Close inspector">
               <Cross2Icon aria-hidden="true" />
             </button>
