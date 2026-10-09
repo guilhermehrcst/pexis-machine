@@ -33,7 +33,7 @@ export function SceneView({ lab, selected, onSelect, reducedMotion }: SceneViewP
       const width = addressWidth(memorySize);
       scene = new MachineScene(container, {
         onSelect: (id) => onSelectRef.current(id),
-        ramLabel: `${bytesHuman(memorySize)} · linear`,
+        ramLabel: `${bytesHuman(memorySize)} linear`,
         formatAddress: (address) => hexAddress(address, width),
       });
       sceneRef.current = scene;

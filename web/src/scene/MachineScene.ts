@@ -37,7 +37,7 @@ const COLOR = {
   gold: 0xc8a75c,
   trace: 0xcac6bd,
   ghost: 0xe9e7e2,
-  ghostEdge: 0xb4afa5,
+  ghostEdge: 0x9b968d,
   accent: 0x2f6bff,
   fetch: 0x7d8799,
   read: 0x2f6bff,
@@ -71,10 +71,23 @@ const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
 // Authored 3/4 view. Only the direction is authored; distance and target are
 // solved geometrically by fitPointsToView for every viewport.
 const DEFAULT_VIEW_DIRECTION = new THREE.Vector3(2.6, 6.25, 8.45).normalize();
-// Labels are DOM boxes above their anchor; reserve this much room above each
-// anchor, along the camera's screen-up axis, so a fitted view never crops a
-// label whatever the orbit angle.
+// Labels are DOM boxes on one side of their anchor (see LabelSide); reserve
+// this much room beyond each anchor, along the camera's screen-up axis, so a
+// fitted view never crops a label whatever the orbit angle.
 const LABEL_ALLOWANCE = 0.45;
+
+/**
+ * Which side of its anchor a label sits on, in screen space. 'above' suits
+ * standing hardware (the label floats over empty floor behind it); 'below'
+ * suits flat hardware in front of other hardware, where a label above would
+ * cover its neighbour.
+ */
+type LabelSide = 'above' | 'below';
+
+interface LabelAnchor {
+  readonly position: THREE.Vector3;
+  readonly side: LabelSide;
+}
 
 /** Overlay space in CSS pixels on each edge of the viewport. */
 export type FramingInsetsPx = FramingInsets;
@@ -107,7 +120,7 @@ export class MachineScene {
   readonly #textures: THREE.Texture[] = [];
   readonly #components = new MachineVisualRegistry<ComponentId>();
   readonly #framingPoints: THREE.Vector3[] = [];
-  readonly #labelAnchors: THREE.Vector3[] = [];
+  readonly #labelAnchors: LabelAnchor[] = [];
   #insetsPx: FramingInsetsPx = NO_INSETS;
   #userOrbited = false;
 
@@ -384,6 +397,7 @@ export class MachineScene {
       'CPU',
       'Pexis Compute · functional core',
       CPU_POS.clone().add(new THREE.Vector3(0, build.height + 0.06, -build.depth / 2)),
+      'above',
     );
   }
 
@@ -404,8 +418,9 @@ export class MachineScene {
     this.#addLabel(
       'ram',
       'RAM',
-      this.#options.ramLabel,
+      `Pexis Memory · ${this.#options.ramLabel}`,
       RAM_POS.clone().add(new THREE.Vector3(0, build.height + 0.08, -build.depth / 2)),
+      'above',
     );
   }
 
@@ -420,7 +435,9 @@ export class MachineScene {
         color: COLOR.ghost,
         roughness: 1,
         transparent: true,
-        opacity: 0.38,
+        // Translucent enough that the floor grid shows through: an empty,
+        // reserved volume, not a device.
+        opacity: 0.28,
         depthWrite: false,
       }),
     );
@@ -455,7 +472,7 @@ export class MachineScene {
 
     this.#addHitTarget('gpu', boxGeometry(2.2, 0.5, 1.7), GPU_POS.clone().setY(0.2));
     this.#addFootprint('gpu', GPU_POS, 2.4, 1.9);
-    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.3), true);
+    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.3), 'above', true);
   }
 
   #buildInterconnect(): void {
@@ -486,11 +503,14 @@ export class MachineScene {
     this.#addHitTarget('interconnect', boxGeometry(1.5, 0.22, 1.76), new THREE.Vector3(0, 0.12, 0.7));
     this.#addHitTarget('interconnect', boxGeometry(1.32, 0.20, 0.34), new THREE.Vector3(-1.01, 0.12, 1.35));
     this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.7), 1.66, 1.98);
+    // Below the Fabric's front edge: above it, the label would cover the
+    // lanes entering the compute package and the live transfer tag.
     this.#addLabel(
       'interconnect',
-      'Pexis Fabric',
-      'CPU ↔ RAM · GPU planned',
-      new THREE.Vector3(0, 0.24, 0.66),
+      'Fabric',
+      'Pexis Fabric · CPU ↔ RAM',
+      new THREE.Vector3(0, 0.02, 1.78),
+      'below',
     );
   }
 
@@ -518,6 +538,7 @@ export class MachineScene {
 
     this.#pulseTag = document.createElement('div');
     this.#pulseTag.className = 'pulse-tag';
+    this.#pulseTag.translate = false;
     this.#pulseTagObject = new CSS2DObject(this.#pulseTag);
     this.#pulseTagObject.visible = false;
     this.#scene.add(this.#pulseTagObject);
@@ -550,9 +571,19 @@ export class MachineScene {
     this.#scene.add(loop);
   }
 
-  #addLabel(id: ComponentId, title: string, detail: string, position: THREE.Vector3, planned = false): void {
+  #addLabel(
+    id: ComponentId,
+    title: string,
+    detail: string,
+    position: THREE.Vector3,
+    side: LabelSide,
+    planned = false,
+  ): void {
     const element = document.createElement('div');
     element.className = planned ? 'scene-label is-planned' : 'scene-label';
+    // Component names and machine facts are identifiers, not prose: a page
+    // translator must not rewrite them (e.g. "RAM" into "BATER").
+    element.translate = false;
     const name = document.createElement('span');
     name.className = 'scene-label__title';
     name.textContent = title;
@@ -561,11 +592,12 @@ export class MachineScene {
     sub.textContent = detail;
     element.append(name, sub);
     const object = new CSS2DObject(element);
-    // Bottom-centre anchoring: the label sits above its anchor point instead
-    // of being centred on it, so it never covers the hardware it names.
-    object.center.set(0.5, 1);
+    // Edge anchoring: the label sits beside its anchor point instead of being
+    // centred on it, so it never covers the hardware it names.
+    object.center.set(0.5, side === 'above' ? 1 : 0);
     object.position.copy(position);
     this.#labelElements.set(id, element);
+    this.#labelAnchors.push({ position: position.clone(), side });
     this.#scene.add(object);
   }
 
@@ -693,9 +725,12 @@ export class MachineScene {
     // direction removed. Label room is reserved along it, not along world Y.
     const worldUp = new THREE.Vector3(0, 1, 0);
     const screenUp = worldUp.clone().addScaledVector(direction, -worldUp.dot(direction)).normalize();
-    const labelPoints = this.#labelAnchors.map((anchor) => anchor.clone().addScaledVector(screenUp, LABEL_ALLOWANCE));
+    const labelPoints = this.#labelAnchors.flatMap(({ position, side }) => [
+      position,
+      position.clone().addScaledVector(screenUp, side === 'above' ? LABEL_ALLOWANCE : -LABEL_ALLOWANCE),
+    ]);
     const fit = fitPointsToView({
-      points: [...this.#framingPoints, ...this.#labelAnchors, ...labelPoints],
+      points: [...this.#framingPoints, ...labelPoints],
       direction,
       fov: this.#camera.fov,
       aspect: this.#camera.aspect,
@@ -723,15 +758,8 @@ export class MachineScene {
     for (const footprint of this.#footprints.values()) {
       points.push(...boxCorners(new THREE.Box3().setFromObject(footprint)));
     }
-    // Labels float above their anchors (see #addLabel); #frame3d reserves room
-    // above each anchor along the screen-up axis of the chosen view.
-    const anchors = this.#labelAnchors;
-    anchors.length = 0;
-    this.#scene.traverse((object) => {
-      if (object instanceof CSS2DObject && object.element.classList.contains('scene-label')) {
-        anchors.push(object.position.clone());
-      }
-    });
+    // Label anchors are recorded by #addLabel; #frame3d reserves room beside
+    // each one along the screen-up axis of the chosen view.
   }
 
   #onOrbitStart = (): void => {
