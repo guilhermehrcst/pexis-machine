@@ -142,12 +142,9 @@ export class ExplodeRig {
     }
   }
 
-  /** Returns every part to its captured rest position, bit for bit. */
+  /** Returns every part to its captured rest position, bit for bit (apply(0) copies rest). */
   restore(): void {
-    this.#amount = 0;
-    for (const { moving } of this.#steps) {
-      for (const { object, rest } of moving) object.position.copy(rest);
-    }
+    this.apply(0);
   }
 
   /** Offset of a part at amount `t`, in root-local units. */
@@ -159,49 +156,23 @@ export class ExplodeRig {
 
   /**
    * World-space bounds of the whole component at amount `t` (default: fully
-   * exploded), computed from rest geometry plus offsets without moving
-   * anything. The camera frames this envelope once, so dragging the separation
+   * exploded), without moving anything: each part's current world bounds,
+   * shifted by the difference between its offset at `t` and its current
+   * offset. The camera frames this envelope once, so dragging the separation
    * never moves the camera.
    */
   envelope(t = 1): THREE.Box3 {
-    const box = new THREE.Box3();
     const root = this.component.root;
-    root.updateWorldMatrix(true, false);
+    root.updateWorldMatrix(true, true);
+    const linear = new THREE.Matrix3().setFromMatrix4(root.matrixWorld);
+    const box = new THREE.Box3();
+    const partBox = new THREE.Box3();
     for (const { part } of this.#steps) {
-      const offset = this.offset(part.id, t);
-      for (const object of part.objects) {
-        const local = new THREE.Box3();
-        object.traverse((child) => {
-          const geometry = (child as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-          if (!geometry) return;
-          child.updateWorldMatrix(true, false);
-          // Bounds in root space at rest: world matrix relative to the root,
-          // minus the part's current offset (the rig may be mid-explode).
-          const relative = new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(child.matrixWorld);
-          const childBox = child instanceof THREE.InstancedMesh ? instancedBounds(child) : geometryBounds(geometry);
-          local.union(childBox.applyMatrix4(relative));
-        });
-        const current = this.offset(part.id, this.#amount);
-        local.translate(offset.clone().sub(current));
-        box.union(local.applyMatrix4(root.matrixWorld));
-      }
+      partBox.makeEmpty();
+      for (const object of part.objects) partBox.expandByObject(object);
+      const shift = this.offset(part.id, t).sub(this.offset(part.id, this.#amount)).applyMatrix3(linear);
+      box.union(partBox.translate(shift));
     }
     return box;
   }
-}
-
-function geometryBounds(geometry: THREE.BufferGeometry): THREE.Box3 {
-  if (!geometry.boundingBox) geometry.computeBoundingBox();
-  return geometry.boundingBox!.clone();
-}
-
-function instancedBounds(mesh: THREE.InstancedMesh): THREE.Box3 {
-  const base = geometryBounds(mesh.geometry);
-  const box = new THREE.Box3();
-  const matrix = new THREE.Matrix4();
-  for (let i = 0; i < mesh.count; i += 1) {
-    mesh.getMatrixAt(i, matrix);
-    box.union(base.clone().applyMatrix4(matrix));
-  }
-  return box;
 }

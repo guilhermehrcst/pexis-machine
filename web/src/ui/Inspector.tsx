@@ -1,4 +1,5 @@
 import { Cross2Icon } from '@radix-ui/react-icons';
+import { useEffect, useRef } from 'react';
 import { STATUS_LABEL, byteCount, bytesHuman, decimal, hexAddress } from '../machine/format';
 import type { LabReady } from '../machine/useMachineLab';
 import { REPRESENTATION_LABEL, type ComponentInspection } from '../scene/inspection';
@@ -40,6 +41,15 @@ export function Inspector({ lab, selected, onSelect, inspection, onInspect, part
   const t = snapshot.telemetry;
   const inspectable = inspectionFor(selected);
   const active = inspection !== null && inspectable !== null && inspection.component === inspectable.componentId;
+
+  // Leaving the exploded view removes the control that was pressed; hand
+  // keyboard focus back to "Inspect parts" instead of dropping it on <body>.
+  const inspectButton = useRef<HTMLButtonElement>(null);
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (wasActive.current && !active && orphanedFocus()) inspectButton.current?.focus();
+    wasActive.current = active;
+  }, [active]);
 
   return (
     <div className="inspector">
@@ -85,6 +95,7 @@ export function Inspector({ lab, selected, onSelect, inspection, onInspect, part
           ) : null}
           {inspectable ? (
             <button
+              ref={inspectButton}
               type="button"
               className="button button--small inspector__inspect"
               onClick={() => onInspect(() => ({ component: inspectable.componentId, part: null, amount: 1, animate: true }))}
@@ -139,10 +150,17 @@ export function PartInspector({ inspectable, inspection, onInspect }: PartInspec
   const partId = inspection.part;
   const info = partId === null ? undefined : inspectable.parts[partId];
   const pick = (part: string | null) => onInspect((current) => (current ? { ...current, part } : current));
+  // Entering removes "Inspect parts"; move focus into the part inspector.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (orphanedFocus()) heading.current?.focus();
+  }, []);
   return (
     <div className="inspector__card inspector__card--parts" aria-live="polite">
       <div className="inspector__head">
-        <h3 translate="no">{inspectable.title} · parts</h3>
+        <h3 translate="no" ref={heading} tabIndex={-1}>
+          {inspectable.title} · parts
+        </h3>
         <button type="button" className="icon-button icon-button--small" onClick={() => onInspect(() => null)} aria-label="Close exploded view">
           <Cross2Icon aria-hidden="true" />
         </button>
@@ -205,4 +223,9 @@ function ExplodeBar({ inspection, onInspect }: { readonly inspection: Inspection
       </button>
     </div>
   );
+}
+
+/** True when focus was dropped on <body> because its element was removed. */
+function orphanedFocus(): boolean {
+  return document.activeElement === null || document.activeElement === document.body;
 }

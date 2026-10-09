@@ -10,6 +10,8 @@ import { DocsView, ExperimentsView, MachineView, OverviewView, TelemetryView } f
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
+  // A range slider takes arrow keys, not text: shortcuts and Escape still apply.
+  if (target instanceof HTMLInputElement && target.type === 'range') return false;
   return target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
 }
 

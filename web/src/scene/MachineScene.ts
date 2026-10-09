@@ -96,6 +96,7 @@ interface LabelAnchor {
 // Exploded inspection: full-range separation and camera transition times.
 const EXPLODE_MS = 700;
 const CAMERA_MS = 520;
+const MIN_RETARGET_MS = 160;
 // Room for the selected part's side label, beyond the exploded envelope
 // along screen-right (world units, like LABEL_ALLOWANCE).
 const PART_LABEL_ALLOWANCE = 1.1;
@@ -142,7 +143,6 @@ export class MachineScene {
   readonly #pointer = new THREE.Vector2();
   readonly #hitTargets: THREE.Mesh[] = [];
   readonly #footprints = new Map<ComponentId, THREE.LineLoop>();
-  readonly #labelElements = new Map<ComponentId, HTMLElement>();
   readonly #labelObjects = new Map<ComponentId, CSS2DObject>();
   readonly #rigs = new Map<ComponentId, ExplodeRig>();
   readonly #textures: THREE.Texture[] = [];
@@ -272,8 +272,8 @@ export class MachineScene {
     for (const [key, footprint] of this.#footprints) {
       footprint.visible = key === id;
     }
-    for (const [key, element] of this.#labelElements) {
-      element.classList.toggle('is-selected', key === id);
+    for (const [key, label] of this.#labelObjects) {
+      label.element.classList.toggle('is-selected', key === id);
     }
     this.#requestRender();
   }
@@ -707,7 +707,6 @@ export class MachineScene {
     // centred on it, so it never covers the hardware it names.
     object.center.set(0.5, side === 'above' ? 1 : 0);
     object.position.copy(position);
-    this.#labelElements.set(id, element);
     this.#labelObjects.set(id, object);
     this.#labelAnchors.push({ position: position.clone(), side });
     this.#scene.add(object);
@@ -723,8 +722,10 @@ export class MachineScene {
 
   #loop = (now: number): void => {
     this.#frame = 0;
+    // During a camera flight the flight alone poses the camera; OrbitControls
+    // would add its own damping on top and land somewhere else.
     const flying = this.#updateCamera(now);
-    const moving = this.#controls.update();
+    const moving = flying ? false : this.#controls.update();
     const exploding = this.#updateInspection(now);
     const animating = this.#updateActivity(now) || exploding || flying;
     this.#renderer.render(this.#scene, this.#camera);
@@ -785,12 +786,16 @@ export class MachineScene {
   #updateInspection(now: number): boolean {
     const rig = this.#inspecting;
     const tween = this.#explodeTween;
-    // The side label follows the camera's screen-right as the user orbits.
-    if (rig && this.#selectedPart !== null) this.#updatePartHighlight();
-    if (!rig || !tween) return false;
-    const k = tween.duration <= 0 ? 1 : Math.min(1, (now - tween.start) / tween.duration);
-    rig.apply(tween.from + (tween.to - tween.from) * k);
-    this.#updatePartHighlight();
+    if (!rig) return false;
+    let k = 1;
+    if (tween) {
+      k = tween.duration <= 0 ? 1 : Math.min(1, (now - tween.start) / tween.duration);
+      rig.apply(tween.from + (tween.to - tween.from) * k);
+    }
+    // Once per frame: follows the moving part and, as the user orbits, the
+    // camera's screen-right.
+    if (this.#selectedPart !== null) this.#updatePartHighlight();
+    if (!tween) return false;
     if (k < 1) return true;
     this.#explodeTween = null;
     if (this.#closing && tween.to === 0) this.#finishClosing();
@@ -845,6 +850,7 @@ export class MachineScene {
     this.#partHelper.visible = true;
     // Side label at the box's extreme along screen-right, so it sits beside
     // the stack instead of over the layer above.
+    this.#camera.updateMatrixWorld();
     const right = new THREE.Vector3().setFromMatrixColumn(this.#camera.matrixWorld, 0).setY(0).normalize();
     const center = this.#partBox.getCenter(new THREE.Vector3());
     const half = this.#partBox.getSize(new THREE.Vector3()).multiplyScalar(0.5);
@@ -861,10 +867,12 @@ export class MachineScene {
     const e = easeInOut(k);
     this.#camera.position.lerpVectors(tween.fromPosition, tween.fit.position, e);
     this.#controls.target.lerpVectors(tween.fromTarget, tween.fit.target, e);
+    this.#camera.lookAt(this.#controls.target);
     if (k < 1) return true;
     this.#cameraTween = null;
     this.#applyDistanceLimits(tween.fit);
     this.#controls.enabled = true;
+    this.#controls.update();
     return false;
   }
 
@@ -924,12 +932,20 @@ export class MachineScene {
       this.#controls.minDistance = 0;
       this.#controls.maxDistance = Infinity;
       this.#controls.enabled = false;
+      // The flight supersedes any orbit inertia still pending; otherwise it
+      // would resume after landing and carry the camera off the fit.
+      clearOrbitInertia(this.#controls);
+      // A refit mid-flight keeps the time left (never less than a short
+      // settle), so continuous resizes cannot postpone the landing forever.
+      const now = performance.now();
+      const previous = this.#cameraTween;
+      const left = previous ? previous.start + previous.duration - now : CAMERA_MS;
       this.#cameraTween = {
         fromPosition: this.#camera.position.clone(),
         fromTarget: this.#controls.target.clone(),
         fit,
-        start: performance.now(),
-        duration: CAMERA_MS,
+        start: now,
+        duration: Math.max(MIN_RETARGET_MS, left),
       };
       return;
     }
@@ -1048,11 +1064,12 @@ export class MachineScene {
     const component = this.#inspecting?.component;
     if (!component) return null;
     this.#aim(event);
-    for (const hit of this.#raycaster.intersectObject(component.root, true)) {
-      const part = component.partOf(hit.object);
-      if (part) return part.id;
-    }
-    return null;
+    // Every component is tested so that another module standing in front of
+    // a lifted part occludes it: only a nearest hit on the inspected
+    // component selects a part.
+    const roots = this.#components.values().map((c) => c.root);
+    const hit = this.#raycaster.intersectObjects(roots, true)[0];
+    return hit ? (component.partOf(hit.object)?.id ?? null) : null;
   }
 
   #aim(event: PointerEvent): void {
@@ -1109,6 +1126,18 @@ function floorFadeTexture(): THREE.Texture {
     context.putImageData(image, 0, 0);
   }
   return new THREE.CanvasTexture(canvas);
+}
+
+/**
+ * Discards OrbitControls' pending damping inertia. three 0.180 keeps it in
+ * underscore fields with no public API; if a future version renames them,
+ * this degrades to a no-op (a flight may then land slightly rotated).
+ */
+function clearOrbitInertia(controls: OrbitControls): void {
+  const internal = controls as unknown as { _sphericalDelta?: THREE.Spherical; _panOffset?: THREE.Vector3; _scale?: number };
+  internal._sphericalDelta?.set(0, 0, 0);
+  internal._panOffset?.set(0, 0, 0);
+  if (typeof internal._scale === 'number') internal._scale = 1;
 }
 
 function glowTexture(): THREE.Texture {

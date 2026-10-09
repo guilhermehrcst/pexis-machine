@@ -4,7 +4,7 @@ import type { LabCommands, LabReady } from '../machine/useMachineLab';
 import type { ComponentId } from '../scene/transfers';
 import { ActivityTimeline } from './ActivityTimeline';
 import { EventsPanel } from './EventsPanel';
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { inspectionFor } from '../scene/inspections';
 import { Inspector, PartInspector } from './Inspector';
 import type { InspectionState } from './inspectionState';
@@ -34,7 +34,8 @@ const PARTS_OVERLAY_MIN_WIDTH = 600;
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
-  useEffect(() => {
+  // Measured before paint, so the first render already picks the right layout.
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const observer = new ResizeObserver(() => setWidth(element.clientWidth));
