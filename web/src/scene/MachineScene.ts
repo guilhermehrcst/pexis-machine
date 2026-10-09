@@ -28,8 +28,7 @@ export interface MachineSceneOptions {
 }
 
 const COLOR = {
-  platform: 0xfbfaf7,
-  platformEdge: 0xe9e6df,
+  platform: 0xf4f2ed,
   grid: 0xe4e0d8,
   graphite: 0x2b2d32,
   graphiteSoft: 0x3a3d44,
@@ -59,6 +58,11 @@ const TRANSFER_LABEL: Readonly<Record<TransferKind, string>> = {
   read: 'Load',
   write: 'Store',
 };
+
+// Floor extent. The hardware spans about x -4.2..3.9 and z -2.3..2.2; the
+// floor stays fully opaque over it and fades to nothing well before its edge.
+const FLOOR = { width: 18, depth: 13 } as const;
+const FLOOR_SOLID = 0.48; // normalised elliptical radius where the fade starts
 
 const CPU_POS = new THREE.Vector3(0, 0, -1.25);
 const RAM_POS = new THREE.Vector3(-2.85, 0, 1.35);
@@ -304,33 +308,62 @@ export class MachineScene {
   }
 
   #buildPlatform(): void {
-    const base = new THREE.Mesh(
-      roundedBoxGeometry(9.4, 0.24, 6.0, 4, 0.12),
-      new THREE.MeshStandardMaterial({ color: COLOR.platform, roughness: 0.92, metalness: 0 }),
+    // A seamless studio floor instead of a hard-edged slab. The camera frames
+    // the hardware, not the floor, so a hard edge would be cropped differently
+    // on every viewport and orbit and read as a broken render. The floor and
+    // its grid fade out well before their edges and the stage background
+    // continues them; no viewport can crop an edge because none is drawn.
+    const { width, depth } = FLOOR;
+    const fade = floorFadeTexture();
+    this.#textures.push(fade);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshStandardMaterial({
+        color: COLOR.platform,
+        roughness: 0.92,
+        metalness: 0,
+        transparent: true,
+        alphaMap: fade,
+        depthWrite: false,
+      }),
     );
-    base.position.y = -0.12;
-    base.receiveShadow = true;
-    this.#scene.add(base);
+    floor.name = 'stage.floor';
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    // Drawn first among transparent objects, so the planned GPU shell
+    // (also transparent) is never washed out by the floor behind it.
+    floor.renderOrder = -2;
+    this.#scene.add(floor);
 
-    const plinth = new THREE.Mesh(
-      roundedBoxGeometry(9.0, 0.18, 5.6, 4, 0.09),
-      new THREE.MeshStandardMaterial({ color: COLOR.platformEdge, roughness: 1 }),
-    );
-    plinth.position.y = -0.3;
-    this.#scene.add(plinth);
-
-    // Fine engineering grid, very low contrast.
-    const points: THREE.Vector3[] = [];
-    for (let x = -4.5; x <= 4.51; x += 0.5) {
-      points.push(new THREE.Vector3(x, 0.002, -2.75), new THREE.Vector3(x, 0.002, 2.75));
+    // Fine engineering grid, very low contrast, faded with the same falloff.
+    const positions: number[] = [];
+    const alphas: number[] = [];
+    const step = 0.5;
+    const push = (x: number, z: number) => {
+      positions.push(x, 0.002, z);
+      alphas.push(1, 1, 1, floorFade(x / (width / 2), z / (depth / 2)));
+    };
+    for (let x = -width / 2; x <= width / 2 + 1e-6; x += step) {
+      for (let z = -depth / 2; z < depth / 2 - 1e-6; z += step) {
+        push(x, z);
+        push(x, z + step);
+      }
     }
-    for (let z = -2.75; z <= 2.76; z += 0.5) {
-      points.push(new THREE.Vector3(-4.5, 0.002, z), new THREE.Vector3(4.5, 0.002, z));
+    for (let z = -depth / 2; z <= depth / 2 + 1e-6; z += step) {
+      for (let x = -width / 2; x < width / 2 - 1e-6; x += step) {
+        push(x, z);
+        push(x + step, z);
+      }
     }
+    const gridGeometry = new THREE.BufferGeometry();
+    gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    gridGeometry.setAttribute('color', new THREE.Float32BufferAttribute(alphas, 4));
     const grid = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color: COLOR.grid, transparent: true, opacity: 0.55 }),
+      gridGeometry,
+      new THREE.LineBasicMaterial({ color: COLOR.grid, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false }),
     );
+    grid.name = 'stage.grid';
+    grid.renderOrder = -1;
     this.#scene.add(grid);
   }
 
@@ -450,9 +483,9 @@ export class MachineScene {
 
     // Passive Fabric is independently selectable without stealing touch
     // targets from compute, RAM, or the still-planned GPU.
-    this.#addHitTarget('interconnect', boxGeometry(1.32, 0.22, 1.75), new THREE.Vector3(0, 0.12, 0.66));
+    this.#addHitTarget('interconnect', boxGeometry(1.5, 0.22, 1.76), new THREE.Vector3(0, 0.12, 0.7));
     this.#addHitTarget('interconnect', boxGeometry(1.32, 0.20, 0.34), new THREE.Vector3(-1.01, 0.12, 1.35));
-    this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.66), 1.66, 1.96);
+    this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.7), 1.66, 1.98);
     this.#addLabel(
       'interconnect',
       'Pexis Fabric',
@@ -747,6 +780,38 @@ function roundedRect(shape: THREE.Shape | THREE.Path, x: number, y: number, w: n
   shape.quadraticCurveTo(x, y + h, x, y + h - r);
   shape.lineTo(x, y + r);
   shape.quadraticCurveTo(x, y, x + r, y);
+}
+
+/** Floor opacity at a normalised elliptical position (|u|,|v| <= 1 at the floor edge). */
+function floorFade(u: number, v: number): number {
+  const r = Math.hypot(u, v);
+  const t = Math.min(1, Math.max(0, (r - FLOOR_SOLID) / (0.95 - FLOOR_SOLID)));
+  return 1 - t * t * (3 - 2 * t);
+}
+
+function floorFadeTexture(): THREE.Texture {
+  // alphaMap samples the green channel; the floor plane's UVs span its full
+  // extent, so the same falloff as floorFade() is rasterised here.
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const image = context.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const value = Math.round(255 * floorFade(((x + 0.5) / size) * 2 - 1, ((y + 0.5) / size) * 2 - 1));
+        const i = (y * size + x) * 4;
+        image.data[i] = value;
+        image.data[i + 1] = value;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+  }
+  return new THREE.CanvasTexture(canvas);
 }
 
 function glowTexture(): THREE.Texture {

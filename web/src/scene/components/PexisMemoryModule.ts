@@ -7,7 +7,6 @@ import { pexisMaterial } from './palette';
 // Same surface vocabulary as Pexis Compute (shared palette). Blue is used
 // only to display real memory events supplied by the C++ simulator.
 const COLOR = {
-  routing: 0x727d8b,
   activity: 0x606875,
   accent: 0x2f6bff,
 } as const;
@@ -23,7 +22,7 @@ export interface PexisMemoryModuleBuild {
 /**
  * Pexis memory cartridge, modeled entirely with procedural geometry.
  *
- * Packages, contacts, and routing are illustrative industrial details:
+ * Packages and contacts are illustrative industrial details:
  * they do not represent simulated memory channels, DRAM banks, bandwidth,
  * physical timing, or memory hierarchy. The C++ core remains the sole truth.
  */
@@ -116,22 +115,6 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
   rails.castShadow = true;
   root.add(rails);
 
-  // Inert surface detailing. It must never animate as fake data movement.
-  const routing = new THREE.InstancedMesh(
-    boxGeometry(0.018, 0.115, 0.009),
-    new THREE.MeshStandardMaterial({ color: COLOR.routing, roughness: 0.57, metalness: 0.45 }),
-    16,
-  );
-  routing.name = 'memory.surface-routing';
-  for (let side = 0; side < 2; side += 1) {
-    for (let i = 0; i < 8; i += 1) {
-      const x = -1.025 + i * (2.05 / 7);
-      routing.setMatrixAt(side * 8 + i, matrix.makeTranslation(x, 0.355, side === 0 ? 0.048 : -0.048));
-    }
-  }
-  routing.instanceMatrix.needsUpdate = true;
-  root.add(routing);
-
   const activityMaterial = new THREE.MeshStandardMaterial({
     color: COLOR.activity,
     emissive: COLOR.accent,
@@ -162,7 +145,6 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
       { id: 'dram-packages', role: 'illustrative-memory-packages', objects: [packages], anchor: packagesAnchor },
       { id: 'contacts', role: 'illustrative-connector', objects: [contacts], anchor: contactsAnchor },
       { id: 'chassis', role: 'industrial-frame', objects: [cap, rails], anchor: chassisAnchor },
-      { id: 'routing', role: 'inert-surface-detail', objects: [routing] },
       { id: 'activity-edge', role: 'observation-memory-access', objects: [activityEdge] },
     ],
   });

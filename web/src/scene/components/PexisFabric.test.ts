@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import { buildPexisComputeModule } from './PexisComputeModule';
+import { buildPexisMemoryModule } from './PexisMemoryModule';
+import { primitiveBoxes } from './testing';
 import {
   FABRIC_VISUAL_LINKS,
   buildPexisFabric,
@@ -99,8 +102,26 @@ describe('Pexis Fabric', () => {
     const objects = renderables(component.root);
     expect(objects.length).toBeLessThanOrEqual(11);
     expect(objects.filter((object) => object instanceof THREE.InstancedMesh)
-      .map((mesh) => (mesh as THREE.InstancedMesh).count).sort((a, b) => a - b)).toEqual([2, 4]);
+      .map((mesh) => (mesh as THREE.InstancedMesh).count).sort((a, b) => a - b)).toEqual([2, 4, 4]);
     expect(objects.some((object) => object.name === 'fabric.carrier')).toBe(true);
+  });
+
+  it('does not bury Fabric geometry inside the compute or memory module it connects', () => {
+    // Module positions that produce PORTS (MachineScene's layout).
+    const compute = buildPexisComputeModule().component.root;
+    compute.position.set(0, 0, -1.25);
+    const memory = buildPexisMemoryModule().component.root;
+    memory.position.set(-2.85, 0, 1.35);
+    const fabric = build().component.root;
+    const hosts = [...primitiveBoxes(compute), ...primitiveBoxes(memory)];
+    const eps = 0.004;
+    for (const part of primitiveBoxes(fabric)) {
+      expect(part.box.min.y, part.name + ' below platform').toBeGreaterThanOrEqual(-eps);
+      for (const host of hosts) {
+        const buried = host.box.clone().expandByScalar(eps).containsBox(part.box);
+        expect(buried, part.name + ' buried in ' + host.name).toBe(false);
+      }
+    }
   });
 
   it('rejects impossible port layouts instead of publishing disconnected geometry', () => {
