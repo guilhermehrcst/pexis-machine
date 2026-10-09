@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addressWidth } from './machine/format';
 import { useMachineLab } from './machine/useMachineLab';
 import type { ComponentId } from './scene/transfers';
+import type { InspectionState } from './ui/inspectionState';
 import { Sidebar, type NavTarget, type ViewId } from './ui/Sidebar';
 import { Toolbar } from './ui/Toolbar';
 import { usePrefersReducedMotion } from './ui/usePrefersReducedMotion';
@@ -9,13 +10,22 @@ import { DocsView, ExperimentsView, MachineView, OverviewView, TelemetryView } f
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
+  // A range slider takes arrow keys, not text: shortcuts and Escape still apply.
+  if (target instanceof HTMLInputElement && target.type === 'range') return false;
   return target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
 }
 
 export function App() {
   const [lab, commands] = useMachineLab();
   const [view, setView] = useState<ViewId>('machine');
-  const [selected, setSelected] = useState<ComponentId | null>(null);
+  const [selected, setSelectedComponent] = useState<ComponentId | null>(null);
+  const [inspection, setInspection] = useState<InspectionState | null>(null);
+  // Selecting another component (or none) ends an exploded inspection; the
+  // scene reassembles the inspected one.
+  const setSelected = useCallback((id: ComponentId | null) => {
+    setSelectedComponent(id);
+    setInspection((current) => (current !== null && current.component !== id ? null : current));
+  }, []);
   const [navOpen, setNavOpen] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const ready = lab.phase === 'ready';
@@ -23,8 +33,9 @@ export function App() {
   const navigate = useCallback((target: NavTarget) => {
     setView(target.view);
     setSelected(target.focus ?? null);
+    setInspection(null);
     setNavOpen(false);
-  }, []);
+  }, [setSelected]);
 
   // Keyboard: S = step, Space = run/pause, R = reset. Ignored while typing or
   // when a modifier is held; Space is ignored on focused buttons.
@@ -43,6 +54,7 @@ export function App() {
         commands.toggleRun();
       } else if (event.key === 'Escape') {
         setNavOpen(false);
+        setInspection(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -95,6 +107,8 @@ export function App() {
                   lab={lab}
                   selected={selected}
                   onSelect={setSelected}
+                  inspection={inspection}
+                  onInspect={setInspection}
                   reducedMotion={reducedMotion}
                   width={addressWidth(lab.client.memorySize)}
                 />

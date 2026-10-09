@@ -2,11 +2,22 @@ import * as THREE from 'three';
 import { boxGeometry, roundedBoxGeometry } from '../primitives';
 import { createVisualComponent, type MachineVisualComponent } from '../semantic';
 import type { ComponentId } from '../transfers';
+import type { ComponentInspection } from '../inspection';
 import { pexisMaterial } from './palette';
 
 // Surfaces come from the shared Pexis palette (graphite structure, satin
 // metal, silicon, nickel). Saturated colour is reserved for real activity
 // (the ring is driven by simulator events, see MachineScene).
+// Semantic roles, shared by the component contract and the inspection text
+// so the inspector can never describe a part with a role it does not have.
+export const COMPUTE_ROLE = {
+  package: 'compute-package',
+  contacts: 'electrical-contacts',
+  'module-frame': 'industrial-frame',
+  'compute-tile': 'physical-compute-surface',
+  'activity-ring': 'observation-activity',
+} as const;
+
 const COLOR = {
   activityIdle: 0x8f96a3,
   activityBase: 0x5d636d,
@@ -137,31 +148,31 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
     parts: [
       {
         id: 'package',
-        role: 'compute-package',
+        role: COMPUTE_ROLE['package'],
         objects: [substrate],
         anchor: packageAnchor,
       },
       {
         id: 'contacts',
-        role: 'electrical-contacts',
+        role: COMPUTE_ROLE['contacts'],
         objects: [contacts],
         anchor: contactsAnchor,
       },
       {
         id: 'module-frame',
-        role: 'industrial-frame',
+        role: COMPUTE_ROLE['module-frame'],
         objects: [carrier, rails],
         anchor: frameAnchor,
       },
       {
         id: 'compute-tile',
-        role: 'physical-compute-surface',
+        role: COMPUTE_ROLE['compute-tile'],
         objects: [computeTile],
         anchor: tileAnchor,
       },
       {
         id: 'activity-ring',
-        role: 'observation-activity',
+        role: COMPUTE_ROLE['activity-ring'],
         objects: [activityRing],
       },
     ],
@@ -175,6 +186,67 @@ export function buildPexisComputeModule(): PexisComputeModuleBuild {
     depth: 2.18,
   };
 }
+
+/**
+ * Exploded inspection of the compute module (M1G). Parts lift straight up off
+ * the package, top part first, in stacking order. Distances come from the
+ * real layer heights (substrate 0–0.16, carrier 0.16–0.29, tile 0.29–0.345,
+ * ring 0.349) so that, fully exploded, every layer clears the one below it.
+ */
+export const COMPUTE_INSPECTION: ComponentInspection = {
+  componentId: 'cpu',
+  title: 'Pexis Compute',
+  simulated:
+    'The core simulates 8 × 64-bit registers, a PC and in-order functional execution of the Pexis ISA. ' +
+    'None of these parts is a simulated structure.',
+  plan: {
+    componentId: 'cpu',
+    steps: [
+      { partId: 'package', direction: [0, 1, 0], distance: 0, delay: 0 },
+      { partId: 'contacts', direction: [0, 1, 0], distance: 0.24, delay: 0.18 },
+      { partId: 'module-frame', direction: [0, 1, 0], distance: 0.52, delay: 0.12 },
+      { partId: 'compute-tile', direction: [0, 1, 0], distance: 0.86, delay: 0.06 },
+      { partId: 'activity-ring', direction: [0, 1, 0], distance: 1.14, delay: 0 },
+    ],
+  },
+  parts: {
+    package: {
+      title: 'Package substrate',
+      role: COMPUTE_ROLE['package'],
+      summary: 'Structural graphite base that carries the module and its contacts.',
+      relation: 'Base of the stack; it stays in place. The Fabric lanes end at its front edge.',
+      representation: 'illustrative',
+    },
+    contacts: {
+      title: 'Contacts',
+      role: COMPUTE_ROLE['contacts'],
+      summary: '64 nickel contacts around the package edge, drawn as one instanced set.',
+      relation: 'Inspected as one set: no single contact has its own identity, signal or meaning.',
+      representation: 'illustrative',
+    },
+    'module-frame': {
+      title: 'Module frame',
+      role: COMPUTE_ROLE['module-frame'],
+      summary: 'Satin carrier with four machined rails framing the compute tile.',
+      relation: 'Holds the compute tile above the package.',
+      representation: 'illustrative',
+    },
+    'compute-tile': {
+      title: 'Compute tile',
+      role: COMPUTE_ROLE['compute-tile'],
+      summary: 'Illustrative silicon surface. It is not a floorplan: no cores, caches or transistors are modelled.',
+      relation: 'Marks where execution happens. The real state is in Registers and Program.',
+      representation: 'illustrative',
+    },
+    'activity-ring': {
+      title: 'Activity ring',
+      role: COMPUTE_ROLE['activity-ring'],
+      summary: 'Shows the core status (ready, running, halted, faulted) and flashes on each step the core reports.',
+      relation: 'Driven only by core events, also while separated. It is not simulated hardware.',
+      representation: 'observation',
+    },
+  },
+};
 
 function anchor(name: string, x: number, y: number, z: number): THREE.Object3D {
   const point = new THREE.Object3D();

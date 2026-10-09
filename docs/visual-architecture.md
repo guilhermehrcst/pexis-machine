@@ -258,11 +258,62 @@ Fabric label hangs below the Fabric's front edge, where it covers neither the la
 the live transfer tag, which is pinned above the static labels. Titles match the component switcher; details carry
 the Pexis module name.
 
+## M1G: Semantic exploded inspection
+
+M1G adds exploded inspection on top of the existing semantic contract. It adds no second model, renderer or scene
+graph. The first vertical slice is the Pexis Compute module. The concepts taken from the reference images are listed
+in [`exploded-references.md`](exploded-references.md).
+
+```text
+ExplodePlan (data, per component)        ExplodeRig (scene/explode.ts, pure)
+  componentId                              binds a plan to a MachineVisualComponent
+  steps[] — one per semantic part          captures rest positions once
+    partId                                 apply(t): rest + direction · distance · ease(progress(t, delay))
+    direction (root-local)                 restore(): rest, bit for bit
+    distance  (0 = base)                   envelope(t): bounds, without moving anything
+    delay     (ordered separation)
+```
+
+**Invariants**, each enforced by a test:
+
+- The plan names every part of its component exactly once. Unknown, duplicate or omitted parts fail closed.
+- Only geometry that exists moves: the part's own objects plus its anchor, so inspection points stay on the part.
+  Moved objects must be direct children of the component root, so travel can never compound.
+- Every pose is derived from rest and the amount `t`; nothing is accumulated per frame. The same `t` gives the same
+  pose whatever happened before. `t = 0` and `restore()` reproduce the assembled pose exactly. After leaving
+  inspection, the whole scene graph, overlays included, is identical to before entering.
+- Fully exploded, each Compute layer clears the one below it.
+- **Instancing policy:** whole-object translation only. An `InstancedMesh` (the 64 contacts) moves and is selected
+  as one set. Instances get no identity of their own.
+
+**Picking.** In inspection, the raycast tests the inspected component's real geometry only, not the invisible
+component hit targets. The nearest hit wins, so occluded geometry cannot be picked. A hit resolves to its part through
+`component.partOf(object)`, which is derived from the ownership map that `createVisualComponent` already validates.
+Mesh names play no part.
+
+**Camera.** The fully exploded envelope is framed once, keeping the user's view direction, so dragging the separation
+never moves the camera. Entering and leaving are short camera transitions. A refit arriving mid-flight (resize, new
+overlay insets) retargets the transition instead of cutting it. With reduced motion, every move is instant.
+
+**Representation.** Each part is labelled as either *illustrative physical geometry* or an *observation of real
+core state*; only the activity ring is the latter. The inspector also states what the core really simulates: 8 ×
+64-bit registers, a PC and in-order functional execution. No part is presented as a simulated structure. The compute
+tile is explicitly not a floorplan.
+
+**Simulator.** Inspection is visual state only. Run, Step and Reset keep working while a component is exploded:
+
+- the core is never paused, reset or informed;
+- the activity ring keeps showing real status wherever it is;
+- the transfer pulse still ends at the package, which is the fixed base.
+
+**Cost.** Normal mode is unchanged: same draw calls, triangles and WebGL objects. Inspection adds one outline draw
+when a part is selected. Its buffers and programs are created once and never per inspection cycle.
+
 ## Next gate
 
-With the component family and scene composition consolidated in M1E, the next
-visual step is interaction: semantic selection of parts and inspection modes
-built on the existing part contract, not new hardware. The visual layer must not grow GPU execution capabilities or
+M1G provides exploded inspection for the Compute module. The next increments apply
+the same `ExplodeRig` to the Memory module and the Fabric (one plan each, no new
+infrastructure). A logical view may follow only for structures the core exposes. The visual layer must not grow GPU execution capabilities or
 pretend that real fabric timing has been measured. Subsequent work on memory
 hierarchies, timing, and heterogeneous execution belongs in the C++ core's
 own M2/M3/M4 milestones.

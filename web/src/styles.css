@@ -654,8 +654,10 @@ button:disabled {
     radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #f6f5f1 60%, #efede7 100%);
 }
 
-/* The legend shares the bottom-left corner with an open inspector card. */
-.stage__viewport:has(.inspector__card) .stage__legend {
+/* The legend shares the bottom-left corner with an open inspector card, and
+   the bottom edge with the exploded-view controls. */
+.stage__viewport:has(.inspector__card) .stage__legend,
+.stage__viewport:has(.explode-bar) .stage__legend {
   visibility: hidden;
 }
 
@@ -708,6 +710,10 @@ button:disabled {
 .scene-labels {
   position: absolute;
   inset: 0;
+  /* Own stacking context: CSS2DRenderer writes depth-sorted z-indexes on each
+     label; they must order labels among themselves, never above the HTML
+     overlays (component switcher, inspector cards) that follow in the DOM. */
+  z-index: 0;
   pointer-events: none;
 }
 
@@ -894,6 +900,122 @@ button:disabled {
 
 .inspector__planned {
   color: var(--text-2);
+}
+
+/* -------------------------------------------------- exploded inspection */
+
+.stage__parts {
+  padding: 12px 12px 0;
+}
+
+.stage__parts .inspector__card {
+  width: 100%;
+  margin-top: 0;
+}
+
+.inspector__inspect {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.part-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 8px;
+}
+
+.part-chip {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.part-chip:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.part-chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.part-nature {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Observation surfaces carry real core state: the one place blue may appear. */
+.part-nature--observation {
+  color: var(--accent);
+}
+
+.part-text {
+  margin: 2px 0 0;
+}
+
+.part-text--muted {
+  color: var(--text-3);
+}
+
+.part-text--simulated {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.explode-bar {
+  /* Bottom of the stage; when a part card overlays the stage, the card takes
+     the free space above and the bar follows it. */
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgb(20 20 25 / 6%);
+}
+
+.inspector__card ~ .explode-bar {
+  margin-top: 0;
+}
+
+.explode-bar__slider {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.explode-bar__slider input {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent);
+}
+
+.scene-label--part {
+  padding: 3px 8px;
+  border-color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------------ panel */
@@ -1878,6 +2000,14 @@ button:disabled {
 
   .button--small {
     min-height: 40px;
+  }
+
+  .part-chip {
+    min-height: 36px;
+  }
+
+  .explode-bar__slider input {
+    min-height: 36px;
   }
 }
 

@@ -53,6 +53,19 @@ GPU Vector Add experiment is shown disabled.
 Labels sit on a declared side of their anchor (`above` for standing hardware, `below` for the flat Fabric in front of
 the compute package), so no label covers the hardware it names or the live transfer tag.
 
+## Exploded inspection (M1G)
+
+Select the CPU and choose **Inspect parts**:
+
+- the Compute module separates into its semantic parts;
+- the **Separation** slider controls how far, and **Explode**/**Assemble** animate it;
+- a part is selected by tapping it or with the part chips, and the inspector names its id, role, and whether it is
+  illustrative geometry or an observation of real core state;
+- **Done**, the close button, Escape, or selecting another component reassemble it exactly.
+
+The simulator keeps running unaffected. On stages narrower than 600 px the part inspector sits below the stage. See
+[`visual-architecture.md`](visual-architecture.md) and [`exploded-references.md`](exploded-references.md).
+
 ## Machine translation
 
 The Web Lab is written in English and stays translatable. Machine state must stay truthful on a translated page, so
