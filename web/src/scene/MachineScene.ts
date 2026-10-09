@@ -28,8 +28,7 @@ export interface MachineSceneOptions {
 }
 
 const COLOR = {
-  platform: 0xfbfaf7,
-  platformEdge: 0xe9e6df,
+  platform: 0xf4f2ed,
   grid: 0xe4e0d8,
   graphite: 0x2b2d32,
   graphiteSoft: 0x3a3d44,
@@ -38,7 +37,7 @@ const COLOR = {
   gold: 0xc8a75c,
   trace: 0xcac6bd,
   ghost: 0xe9e7e2,
-  ghostEdge: 0xb4afa5,
+  ghostEdge: 0x9b968d,
   accent: 0x2f6bff,
   fetch: 0x7d8799,
   read: 0x2f6bff,
@@ -60,6 +59,11 @@ const TRANSFER_LABEL: Readonly<Record<TransferKind, string>> = {
   write: 'Store',
 };
 
+// Floor extent. The hardware spans about x -4.2..3.9 and z -2.3..2.2; the
+// floor stays fully opaque over it and fades to nothing well before its edge.
+const FLOOR = { width: 18, depth: 13 } as const;
+const FLOOR_SOLID = 0.48; // normalised elliptical radius where the fade starts
+
 const CPU_POS = new THREE.Vector3(0, 0, -1.25);
 const RAM_POS = new THREE.Vector3(-2.85, 0, 1.35);
 const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
@@ -67,10 +71,23 @@ const GPU_POS = new THREE.Vector3(2.85, 0, 1.35);
 // Authored 3/4 view. Only the direction is authored; distance and target are
 // solved geometrically by fitPointsToView for every viewport.
 const DEFAULT_VIEW_DIRECTION = new THREE.Vector3(2.6, 6.25, 8.45).normalize();
-// Labels are DOM boxes above their anchor; reserve this much room above each
-// anchor, along the camera's screen-up axis, so a fitted view never crops a
-// label whatever the orbit angle.
+// Labels are DOM boxes on one side of their anchor (see LabelSide); reserve
+// this much room beyond each anchor, along the camera's screen-up axis, so a
+// fitted view never crops a label whatever the orbit angle.
 const LABEL_ALLOWANCE = 0.45;
+
+/**
+ * Which side of its anchor a label sits on, in screen space. 'above' suits
+ * standing hardware (the label floats over empty floor behind it); 'below'
+ * suits flat hardware in front of other hardware, where a label above would
+ * cover its neighbour.
+ */
+type LabelSide = 'above' | 'below';
+
+interface LabelAnchor {
+  readonly position: THREE.Vector3;
+  readonly side: LabelSide;
+}
 
 /** Overlay space in CSS pixels on each edge of the viewport. */
 export type FramingInsetsPx = FramingInsets;
@@ -103,7 +120,7 @@ export class MachineScene {
   readonly #textures: THREE.Texture[] = [];
   readonly #components = new MachineVisualRegistry<ComponentId>();
   readonly #framingPoints: THREE.Vector3[] = [];
-  readonly #labelAnchors: THREE.Vector3[] = [];
+  readonly #labelAnchors: LabelAnchor[] = [];
   #insetsPx: FramingInsetsPx = NO_INSETS;
   #userOrbited = false;
 
@@ -137,8 +154,10 @@ export class MachineScene {
     this.#renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.#renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.#renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 1.05;
+    // Khronos PBR Neutral keeps authored albedo: graphite stays graphite and
+    // the platform stays off-white instead of ACES's grey, desaturated wash.
+    this.#renderer.toneMapping = THREE.NeutralToneMapping;
+    this.#renderer.toneMappingExposure = 1;
     this.#renderer.shadowMap.enabled = true;
     this.#renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.#renderer.domElement.className = 'scene-canvas';
@@ -302,33 +321,62 @@ export class MachineScene {
   }
 
   #buildPlatform(): void {
-    const base = new THREE.Mesh(
-      roundedBoxGeometry(9.4, 0.24, 6.0, 4, 0.12),
-      new THREE.MeshStandardMaterial({ color: COLOR.platform, roughness: 0.92, metalness: 0 }),
+    // A seamless studio floor instead of a hard-edged slab. The camera frames
+    // the hardware, not the floor, so a hard edge would be cropped differently
+    // on every viewport and orbit and read as a broken render. The floor and
+    // its grid fade out well before their edges and the stage background
+    // continues them; no viewport can crop an edge because none is drawn.
+    const { width, depth } = FLOOR;
+    const fade = floorFadeTexture();
+    this.#textures.push(fade);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshStandardMaterial({
+        color: COLOR.platform,
+        roughness: 0.92,
+        metalness: 0,
+        transparent: true,
+        alphaMap: fade,
+        depthWrite: false,
+      }),
     );
-    base.position.y = -0.12;
-    base.receiveShadow = true;
-    this.#scene.add(base);
+    floor.name = 'stage.floor';
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    // Drawn first among transparent objects, so the planned GPU shell
+    // (also transparent) is never washed out by the floor behind it.
+    floor.renderOrder = -2;
+    this.#scene.add(floor);
 
-    const plinth = new THREE.Mesh(
-      roundedBoxGeometry(9.0, 0.18, 5.6, 4, 0.09),
-      new THREE.MeshStandardMaterial({ color: COLOR.platformEdge, roughness: 1 }),
-    );
-    plinth.position.y = -0.3;
-    this.#scene.add(plinth);
-
-    // Fine engineering grid, very low contrast.
-    const points: THREE.Vector3[] = [];
-    for (let x = -4.5; x <= 4.51; x += 0.5) {
-      points.push(new THREE.Vector3(x, 0.002, -2.75), new THREE.Vector3(x, 0.002, 2.75));
+    // Fine engineering grid, very low contrast, faded with the same falloff.
+    const positions: number[] = [];
+    const alphas: number[] = [];
+    const step = 0.5;
+    const push = (x: number, z: number) => {
+      positions.push(x, 0.002, z);
+      alphas.push(1, 1, 1, floorFade(x / (width / 2), z / (depth / 2)));
+    };
+    for (let x = -width / 2; x <= width / 2 + 1e-6; x += step) {
+      for (let z = -depth / 2; z < depth / 2 - 1e-6; z += step) {
+        push(x, z);
+        push(x, z + step);
+      }
     }
-    for (let z = -2.75; z <= 2.76; z += 0.5) {
-      points.push(new THREE.Vector3(-4.5, 0.002, z), new THREE.Vector3(4.5, 0.002, z));
+    for (let z = -depth / 2; z <= depth / 2 + 1e-6; z += step) {
+      for (let x = -width / 2; x < width / 2 - 1e-6; x += step) {
+        push(x, z);
+        push(x + step, z);
+      }
     }
+    const gridGeometry = new THREE.BufferGeometry();
+    gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    gridGeometry.setAttribute('color', new THREE.Float32BufferAttribute(alphas, 4));
     const grid = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color: COLOR.grid, transparent: true, opacity: 0.55 }),
+      gridGeometry,
+      new THREE.LineBasicMaterial({ color: COLOR.grid, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false }),
     );
+    grid.name = 'stage.grid';
+    grid.renderOrder = -1;
     this.#scene.add(grid);
   }
 
@@ -349,6 +397,7 @@ export class MachineScene {
       'CPU',
       'Pexis Compute · functional core',
       CPU_POS.clone().add(new THREE.Vector3(0, build.height + 0.06, -build.depth / 2)),
+      'above',
     );
   }
 
@@ -369,8 +418,9 @@ export class MachineScene {
     this.#addLabel(
       'ram',
       'RAM',
-      this.#options.ramLabel,
+      `Pexis Memory · ${this.#options.ramLabel}`,
       RAM_POS.clone().add(new THREE.Vector3(0, build.height + 0.08, -build.depth / 2)),
+      'above',
     );
   }
 
@@ -385,7 +435,9 @@ export class MachineScene {
         color: COLOR.ghost,
         roughness: 1,
         transparent: true,
-        opacity: 0.38,
+        // Translucent enough that the floor grid shows through: an empty,
+        // reserved volume, not a device.
+        opacity: 0.28,
         depthWrite: false,
       }),
     );
@@ -420,7 +472,7 @@ export class MachineScene {
 
     this.#addHitTarget('gpu', boxGeometry(2.2, 0.5, 1.7), GPU_POS.clone().setY(0.2));
     this.#addFootprint('gpu', GPU_POS, 2.4, 1.9);
-    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.3), true);
+    this.#addLabel('gpu', 'GPU', 'Planned · M4', GPU_POS.clone().setY(0.3), 'above', true);
   }
 
   #buildInterconnect(): void {
@@ -448,14 +500,17 @@ export class MachineScene {
 
     // Passive Fabric is independently selectable without stealing touch
     // targets from compute, RAM, or the still-planned GPU.
-    this.#addHitTarget('interconnect', boxGeometry(1.32, 0.22, 1.75), new THREE.Vector3(0, 0.12, 0.66));
+    this.#addHitTarget('interconnect', boxGeometry(1.5, 0.22, 1.76), new THREE.Vector3(0, 0.12, 0.7));
     this.#addHitTarget('interconnect', boxGeometry(1.32, 0.20, 0.34), new THREE.Vector3(-1.01, 0.12, 1.35));
-    this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.66), 1.66, 1.96);
+    this.#addFootprint('interconnect', new THREE.Vector3(0, 0, 0.7), 1.66, 1.98);
+    // Below the Fabric's front edge: above it, the label would cover the
+    // lanes entering the compute package and the live transfer tag.
     this.#addLabel(
       'interconnect',
-      'Pexis Fabric',
-      'CPU ↔ RAM · GPU planned',
-      new THREE.Vector3(0, 0.24, 0.66),
+      'Fabric',
+      'Pexis Fabric · CPU ↔ RAM',
+      new THREE.Vector3(0, 0.02, 1.78),
+      'below',
     );
   }
 
@@ -483,6 +538,7 @@ export class MachineScene {
 
     this.#pulseTag = document.createElement('div');
     this.#pulseTag.className = 'pulse-tag';
+    this.#pulseTag.translate = false;
     this.#pulseTagObject = new CSS2DObject(this.#pulseTag);
     this.#pulseTagObject.visible = false;
     this.#scene.add(this.#pulseTagObject);
@@ -515,9 +571,19 @@ export class MachineScene {
     this.#scene.add(loop);
   }
 
-  #addLabel(id: ComponentId, title: string, detail: string, position: THREE.Vector3, planned = false): void {
+  #addLabel(
+    id: ComponentId,
+    title: string,
+    detail: string,
+    position: THREE.Vector3,
+    side: LabelSide,
+    planned = false,
+  ): void {
     const element = document.createElement('div');
     element.className = planned ? 'scene-label is-planned' : 'scene-label';
+    // Component names and machine facts are identifiers, not prose: a page
+    // translator must not rewrite them (e.g. "RAM" into "BATER").
+    element.translate = false;
     const name = document.createElement('span');
     name.className = 'scene-label__title';
     name.textContent = title;
@@ -526,11 +592,12 @@ export class MachineScene {
     sub.textContent = detail;
     element.append(name, sub);
     const object = new CSS2DObject(element);
-    // Bottom-centre anchoring: the label sits above its anchor point instead
-    // of being centred on it, so it never covers the hardware it names.
-    object.center.set(0.5, 1);
+    // Edge anchoring: the label sits beside its anchor point instead of being
+    // centred on it, so it never covers the hardware it names.
+    object.center.set(0.5, side === 'above' ? 1 : 0);
     object.position.copy(position);
     this.#labelElements.set(id, element);
+    this.#labelAnchors.push({ position: position.clone(), side });
     this.#scene.add(object);
   }
 
@@ -658,9 +725,12 @@ export class MachineScene {
     // direction removed. Label room is reserved along it, not along world Y.
     const worldUp = new THREE.Vector3(0, 1, 0);
     const screenUp = worldUp.clone().addScaledVector(direction, -worldUp.dot(direction)).normalize();
-    const labelPoints = this.#labelAnchors.map((anchor) => anchor.clone().addScaledVector(screenUp, LABEL_ALLOWANCE));
+    const labelPoints = this.#labelAnchors.flatMap(({ position, side }) => [
+      position,
+      position.clone().addScaledVector(screenUp, side === 'above' ? LABEL_ALLOWANCE : -LABEL_ALLOWANCE),
+    ]);
     const fit = fitPointsToView({
-      points: [...this.#framingPoints, ...this.#labelAnchors, ...labelPoints],
+      points: [...this.#framingPoints, ...labelPoints],
       direction,
       fov: this.#camera.fov,
       aspect: this.#camera.aspect,
@@ -688,15 +758,8 @@ export class MachineScene {
     for (const footprint of this.#footprints.values()) {
       points.push(...boxCorners(new THREE.Box3().setFromObject(footprint)));
     }
-    // Labels float above their anchors (see #addLabel); #frame3d reserves room
-    // above each anchor along the screen-up axis of the chosen view.
-    const anchors = this.#labelAnchors;
-    anchors.length = 0;
-    this.#scene.traverse((object) => {
-      if (object instanceof CSS2DObject && object.element.classList.contains('scene-label')) {
-        anchors.push(object.position.clone());
-      }
-    });
+    // Label anchors are recorded by #addLabel; #frame3d reserves room beside
+    // each one along the screen-up axis of the chosen view.
   }
 
   #onOrbitStart = (): void => {
@@ -745,6 +808,38 @@ function roundedRect(shape: THREE.Shape | THREE.Path, x: number, y: number, w: n
   shape.quadraticCurveTo(x, y + h, x, y + h - r);
   shape.lineTo(x, y + r);
   shape.quadraticCurveTo(x, y, x + r, y);
+}
+
+/** Floor opacity at a normalised elliptical position (|u|,|v| <= 1 at the floor edge). */
+function floorFade(u: number, v: number): number {
+  const r = Math.hypot(u, v);
+  const t = Math.min(1, Math.max(0, (r - FLOOR_SOLID) / (0.95 - FLOOR_SOLID)));
+  return 1 - t * t * (3 - 2 * t);
+}
+
+function floorFadeTexture(): THREE.Texture {
+  // alphaMap samples the green channel; the floor plane's UVs span its full
+  // extent, so the same falloff as floorFade() is rasterised here.
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const image = context.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const value = Math.round(255 * floorFade(((x + 0.5) / size) * 2 - 1, ((y + 0.5) / size) * 2 - 1));
+        const i = (y * size + x) * 4;
+        image.data[i] = value;
+        image.data[i + 1] = value;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+  }
+  return new THREE.CanvasTexture(canvas);
 }
 
 function glowTexture(): THREE.Texture {

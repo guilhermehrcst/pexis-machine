@@ -116,7 +116,7 @@ export function MemoryPanel({ lab, width }: { readonly lab: LabReady; readonly w
         </div>
       }
     >
-      <div className="hex" role="table" aria-label={`RAM bytes ${hexAddress(page.start, width)} to ${hexAddress(page.start + page.length - 1, width)}`}>
+      <div className="hex" translate="no" role="table" aria-label={`RAM bytes ${hexAddress(page.start, width)} to ${hexAddress(page.start + page.length - 1, width)}`}>
         <div className="hex__row hex__row--head" role="row">
           <span className="hex__addr" role="columnheader">
             address

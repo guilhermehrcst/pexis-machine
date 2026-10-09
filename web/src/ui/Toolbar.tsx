@@ -70,7 +70,8 @@ export function Toolbar({ lab, commands, onOpenNav }: ToolbarProps) {
           title="Run until HALT or FAULT, or pause (Space)"
         >
           {running ? <PauseIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
-          <span>{running ? 'Pause' : 'Run'}</span>
+          {/* Keyed: a translated label must change with the state (see Sidebar). */}
+          <span key={running ? 'pause' : 'run'}>{running ? 'Pause' : 'Run'}</span>
         </button>
         <label className="field field--inline">
           <span className="field__label">Pace</span>
@@ -97,6 +98,7 @@ export function Toolbar({ lab, commands, onOpenNav }: ToolbarProps) {
         </span>
         <span
           className={`status status--${snapshot.status}`}
+          translate="no"
           role="status"
           aria-live="polite"
           title="Core status from the snapshot. Running = program started and not yet halted or faulted."

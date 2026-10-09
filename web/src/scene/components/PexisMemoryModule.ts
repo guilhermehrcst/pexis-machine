@@ -2,17 +2,11 @@ import * as THREE from 'three';
 import { boxGeometry, roundedBoxGeometry } from '../primitives';
 import { createVisualComponent, type MachineVisualComponent } from '../semantic';
 import type { ComponentId } from '../transfers';
+import { pexisMaterial } from './palette';
 
-// Consistent with Pexis Compute: graphite, satin metal, nickel. Blue is used
+// Same surface vocabulary as Pexis Compute (shared palette). Blue is used
 // only to display real memory events supplied by the C++ simulator.
 const COLOR = {
-  mount: 0x292d35,
-  carrier: 0x313945,
-  package: 0x1c232d,
-  nickel: 0x9ea3ab,
-  chassis: 0xb8bdc5,
-  chassisRail: 0x7d838d,
-  routing: 0x727d8b,
   activity: 0x606875,
   accent: 0x2f6bff,
 } as const;
@@ -28,7 +22,7 @@ export interface PexisMemoryModuleBuild {
 /**
  * Pexis memory cartridge, modeled entirely with procedural geometry.
  *
- * Packages, contacts, and routing are illustrative industrial details:
+ * Packages and contacts are illustrative industrial details:
  * they do not represent simulated memory channels, DRAM banks, bandwidth,
  * physical timing, or memory hierarchy. The C++ core remains the sole truth.
  */
@@ -38,7 +32,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
 
   const mount = new THREE.Mesh(
     roundedBoxGeometry(2.72, 0.15, 0.42, 3, 0.044),
-    new THREE.MeshStandardMaterial({ color: COLOR.mount, roughness: 0.55, metalness: 0.24 }),
+    pexisMaterial('graphite'),
   );
   mount.name = 'memory.mount';
   mount.position.y = 0.075;
@@ -48,7 +42,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
 
   const pcb = new THREE.Mesh(
     roundedBoxGeometry(2.48, 0.78, 0.07, 3, 0.018),
-    new THREE.MeshStandardMaterial({ color: COLOR.carrier, roughness: 0.55, metalness: 0.17 }),
+    pexisMaterial('graphiteSoft'),
   );
   pcb.name = 'memory.carrier';
   pcb.position.y = 0.535;
@@ -58,7 +52,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
   // Two faces, eight illustrative package shapes each. One draw call.
   const packages = new THREE.InstancedMesh(
     roundedBoxGeometry(0.23, 0.355, 0.04, 2, 0.014),
-    new THREE.MeshStandardMaterial({ color: COLOR.package, roughness: 0.5, metalness: 0.2 }),
+    pexisMaterial('silicon'),
     16,
   );
   packages.name = 'memory.packages';
@@ -77,7 +71,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
   // simulator-visible memory ports or channels.
   const contacts = new THREE.InstancedMesh(
     boxGeometry(0.058, 0.105, 0.014),
-    new THREE.MeshStandardMaterial({ color: COLOR.nickel, roughness: 0.38, metalness: 0.68 }),
+    pexisMaterial('nickel'),
     48,
   );
   contacts.name = 'memory.contacts';
@@ -92,7 +86,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
 
   const cap = new THREE.Mesh(
     roundedBoxGeometry(2.62, 0.102, 0.14, 3, 0.036),
-    new THREE.MeshStandardMaterial({ color: COLOR.chassis, roughness: 0.46, metalness: 0.55 }),
+    pexisMaterial('satin'),
   );
   cap.name = 'memory.chassis-cap';
   cap.position.y = 0.953;
@@ -102,7 +96,7 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
   // Four restrained protective rails, instanced in one draw call.
   const rails = new THREE.InstancedMesh(
     boxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: COLOR.chassisRail, roughness: 0.42, metalness: 0.5 }),
+    pexisMaterial('rail'),
     4,
   );
   rails.name = 'memory.chassis-rails';
@@ -120,22 +114,6 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
   rails.instanceMatrix.needsUpdate = true;
   rails.castShadow = true;
   root.add(rails);
-
-  // Inert surface detailing. It must never animate as fake data movement.
-  const routing = new THREE.InstancedMesh(
-    boxGeometry(0.018, 0.115, 0.009),
-    new THREE.MeshStandardMaterial({ color: COLOR.routing, roughness: 0.57, metalness: 0.45 }),
-    16,
-  );
-  routing.name = 'memory.surface-routing';
-  for (let side = 0; side < 2; side += 1) {
-    for (let i = 0; i < 8; i += 1) {
-      const x = -1.025 + i * (2.05 / 7);
-      routing.setMatrixAt(side * 8 + i, matrix.makeTranslation(x, 0.355, side === 0 ? 0.048 : -0.048));
-    }
-  }
-  routing.instanceMatrix.needsUpdate = true;
-  root.add(routing);
 
   const activityMaterial = new THREE.MeshStandardMaterial({
     color: COLOR.activity,
@@ -167,7 +145,6 @@ export function buildPexisMemoryModule(): PexisMemoryModuleBuild {
       { id: 'dram-packages', role: 'illustrative-memory-packages', objects: [packages], anchor: packagesAnchor },
       { id: 'contacts', role: 'illustrative-connector', objects: [contacts], anchor: contactsAnchor },
       { id: 'chassis', role: 'industrial-frame', objects: [cap, rails], anchor: chassisAnchor },
-      { id: 'routing', role: 'inert-surface-detail', objects: [routing] },
       { id: 'activity-edge', role: 'observation-memory-access', objects: [activityEdge] },
     ],
   });

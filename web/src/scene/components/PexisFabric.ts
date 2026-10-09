@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { boxGeometry, roundedBoxGeometry } from '../primitives';
 import { createVisualComponent, type MachineVisualComponent } from '../semantic';
 import type { ComponentId } from '../transfers';
+import { pexisMaterial } from './palette';
 
 /**
  * The current core reports only CPU <-> RAM fetch/load/store events. No
@@ -45,17 +46,26 @@ export interface PexisFabricBuild {
 }
 
 const COLOR = {
-  carrier: 0x303843,
-  rail: 0x858b95,
-  land: 0xa4a9b1,
-  seal: 0xb8bdc5,
-  activeTrace: 0xbcbfc6,
-  plannedTrace: 0xa9adb4,
+  plannedPort: 0x7d838d,
+  // Graphite at partial opacity: legible as a reserved route on the satin
+  // carrier and on the platform, yet clearly lighter than the observed lanes.
+  plannedTrace: 0x2a2e35,
   accent: 0x2f6bff,
 } as const;
 
 const TRACE_HEIGHT = 0.056;
 const LANE_OFFSETS = [-0.11, 0, 0.11] as const;
+
+// Carrier layout (world units, Fabric root at the origin). The carrier stops
+// short of the compute package instead of sliding under it, and its rails stop
+// short of the lane crossings, so no Fabric geometry is buried in another
+// module or pierced by a lane.
+const CARRIER = { width: 1.45, back: 0, front: 1.56, height: 0.02 } as const;
+const RAIL = { height: 0.022, back: 0.04, sideFront: 1.12 } as const;
+// Compute ports sit under the package edge (lanes tuck under it); the visible
+// endpoint land starts at the edge, this far in front of the port.
+const COMPUTE_EDGE_SETBACK = 0.09;
+const LAND = { along: 0.16, across: 0.3, height: 0.016 } as const;
 
 /**
  * Procedural Pexis Fabric carrier and its honest connection diagram.
@@ -81,98 +91,101 @@ export function buildPexisFabric(ports: PexisFabricPorts): PexisFabricBuild {
 
   const root = new THREE.Group();
   root.name = 'PexisFabric';
+  const carrierDepth = CARRIER.front - CARRIER.back;
+  const carrierCenterZ = (CARRIER.front + CARRIER.back) / 2;
+  const carrierTop = CARRIER.height;
 
-  // A low interposer plate beneath the longitudinal sections of the tracks.
-  // It is visual housing, not a simulated switch or memory controller.
+  // A low satin interposer plate beneath the longitudinal sections of the
+  // tracks. Light, so the Fabric frames the routes instead of becoming the
+  // heaviest mass in the scene. Visual housing, not a switch or controller.
   const carrier = new THREE.Mesh(
-    roundedBoxGeometry(1.45, 0.02, 1.76, 3, 0.065),
-    new THREE.MeshStandardMaterial({
-      color: COLOR.carrier,
-      roughness: 0.58,
-      metalness: 0.22,
-    }),
+    roundedBoxGeometry(CARRIER.width, CARRIER.height, carrierDepth, 3, 0.065),
+    pexisMaterial('satin'),
   );
   carrier.name = 'fabric.carrier';
-  carrier.position.set(0, 0.01, 0.66);
+  carrier.position.set(0, CARRIER.height / 2, carrierCenterZ);
   carrier.receiveShadow = true;
   root.add(carrier);
 
-  // Four machined boundary rails are a single draw call.
-  const rails = new THREE.InstancedMesh(
-    boxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({
-      color: COLOR.rail,
-      roughness: 0.46,
-      metalness: 0.48,
-    }),
-    4,
-  );
+  // Four machined rails, one draw call: two side rails, a front rail, and a
+  // centre divider between the observed corridor (x < 0) and the planned one
+  // (x > 0). They sit on the carrier and end before any lane crosses them.
+  const rails = new THREE.InstancedMesh(boxGeometry(1, 1, 1), pexisMaterial('rail'), 4);
   rails.name = 'fabric.frame-rails';
+  const railY = carrierTop + RAIL.height / 2;
+  const sideDepth = RAIL.sideFront - RAIL.back;
+  const sideZ = (RAIL.sideFront + RAIL.back) / 2;
+  const sideX = CARRIER.width / 2 - 0.035;
   for (const [i, spec] of [
-    { x: -0.69, z: 0.66, width: 0.035, depth: 1.55 },
-    { x: 0.69, z: 0.66, width: 0.035, depth: 1.55 },
-    { x: 0, z: -0.19, width: 1.28, depth: 0.04 },
-    { x: 0, z: 1.51, width: 1.28, depth: 0.04 },
+    { x: -sideX, z: sideZ, width: 0.035, depth: sideDepth },
+    { x: sideX, z: sideZ, width: 0.035, depth: sideDepth },
+    { x: 0, z: CARRIER.front - 0.035, width: CARRIER.width - 0.15, depth: 0.035 },
+    { x: 0, z: sideZ, width: 0.03, depth: sideDepth },
   ].entries()) {
     rails.setMatrixAt(i, new THREE.Matrix4().compose(
-      new THREE.Vector3(spec.x, 0.043, spec.z),
+      new THREE.Vector3(spec.x, railY, spec.z),
       new THREE.Quaternion(),
-      new THREE.Vector3(spec.width, 0.025, spec.depth),
+      new THREE.Vector3(spec.width, RAIL.height, spec.depth),
     ));
   }
   rails.instanceMatrix.needsUpdate = true;
   root.add(rails);
 
+  // Nickel endpoint lands where the observed lanes leave each module: beside
+  // the memory mount and in front of the compute package, both visible.
+  const landY = LAND.height / 2;
   const activePorts = new THREE.InstancedMesh(
-    boxGeometry(0.23, 0.021, 0.19),
-    new THREE.MeshStandardMaterial({ color: COLOR.land, roughness: 0.46, metalness: 0.5 }),
+    boxGeometry(1, LAND.height, 1),
+    pexisMaterial('nickel'),
     2,
   );
   activePorts.name = 'fabric.active-endpoints';
-  for (const [i, port] of [ports.memory, ports.compute].entries()) {
-    activePorts.setMatrixAt(i, new THREE.Matrix4().makeTranslation(port.x, 0.021, port.z));
-  }
+  activePorts.setMatrixAt(0, new THREE.Matrix4().compose(
+    new THREE.Vector3(ports.memory.x + LAND.along / 2, landY, ports.memory.z),
+    new THREE.Quaternion(),
+    new THREE.Vector3(LAND.along, 1, LAND.across),
+  ));
+  activePorts.setMatrixAt(1, new THREE.Matrix4().compose(
+    new THREE.Vector3(ports.compute.x, landY, ports.compute.z + COMPUTE_EDGE_SETBACK + LAND.along / 2),
+    new THREE.Quaternion(),
+    new THREE.Vector3(LAND.across, 1, LAND.along),
+  ));
   activePorts.instanceMatrix.needsUpdate = true;
   root.add(activePorts);
 
   const plannedPort = new THREE.Mesh(
-    boxGeometry(0.23, 0.021, 0.19),
+    boxGeometry(LAND.along, LAND.height, LAND.across),
     new THREE.MeshStandardMaterial({
-      color: COLOR.plannedTrace,
+      color: COLOR.plannedPort,
       roughness: 0.65,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.45,
       depthWrite: false,
     }),
   );
   plannedPort.name = 'fabric.graphics-reserved-port';
-  plannedPort.position.set(ports.graphicsReserved.x, 0.021, ports.graphicsReserved.z);
+  plannedPort.position.set(ports.graphicsReserved.x, landY, ports.graphicsReserved.z);
   root.add(plannedPort);
 
-  // A restrained fabrication mark, not a powered controller.
-  const mark = new THREE.Mesh(
-    roundedBoxGeometry(0.2, 0.015, 0.2, 2, 0.025),
-    new THREE.MeshStandardMaterial({
-      color: COLOR.seal,
-      roughness: 0.48,
-      metalness: 0.48,
-    }),
-  );
+  // The Pexis identity: the 2×2 brand mark, engraved in graphite between the
+  // two route corners. A fabrication mark, not a powered controller.
+  const mark = new THREE.InstancedMesh(roundedBoxGeometry(0.07, 0.01, 0.07, 2, 0.012), pexisMaterial('graphite'), 4);
   mark.name = 'fabric.identity-mark';
-  mark.position.set(0, 0.038, 0.68);
+  for (let i = 0; i < 4; i += 1) {
+    const x = (i % 2 === 0 ? -1 : 1) * 0.05;
+    const z = CARRIER.front - 0.26 + (i < 2 ? -1 : 1) * 0.05;
+    mark.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, carrierTop + 0.005, z));
+  }
+  mark.instanceMatrix.needsUpdate = true;
   root.add(mark);
 
   const activeLanes: FabricLane[] = [];
   const activeMeshes: THREE.Mesh[] = [];
   for (const offset of LANE_OFFSETS) {
     const curve = makeOrthogonalLink(ports.memory, ports.compute, -1, offset);
-    const material = new THREE.MeshStandardMaterial({
-      color: COLOR.activeTrace,
-      roughness: 0.47,
-      metalness: 0.3,
-      emissive: COLOR.accent,
-      emissiveIntensity: 0,
-    });
+    // Graphite traces: crisp against the satin carrier and the platform, and
+    // the only Fabric surface that real CPU/RAM events may light up.
+    const material = pexisMaterial('graphiteSoft', { emissive: COLOR.accent, emissiveIntensity: 0 });
     const mesh = new THREE.Mesh(
       new THREE.TubeGeometry(curve, 96, offset === 0 ? 0.026 : 0.018, 8),
       material,
@@ -195,7 +208,7 @@ export function buildPexisFabric(ports: PexisFabricPorts): PexisFabricBuild {
         dashSize: 0.07,
         gapSize: 0.07,
         transparent: true,
-        opacity: 0.56,
+        opacity: 0.42,
       }),
     );
     line.name = 'fabric.graphics-planned';
@@ -205,7 +218,7 @@ export function buildPexisFabric(ports: PexisFabricPorts): PexisFabricBuild {
     plannedMeshes.push(line);
   }
 
-  const carrierAnchor = anchor('anchor.fabric-center', 0, 0.08, 0.66);
+  const carrierAnchor = anchor('anchor.fabric-center', 0, 0.08, carrierCenterZ);
   const memoryAnchor = anchor('anchor.fabric-memory', ports.memory.x, TRACE_HEIGHT, ports.memory.z);
   const graphicsAnchor = anchor(
     'anchor.fabric-graphics-reserved', ports.graphicsReserved.x, TRACE_HEIGHT, ports.graphicsReserved.z,

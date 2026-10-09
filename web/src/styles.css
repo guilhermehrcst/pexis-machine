@@ -715,11 +715,12 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 1px;
   padding: 4px 9px 5px;
-  border: 1px solid rgb(0 0 0 / 7%);
+  border: 1px solid rgb(0 0 0 / 6%);
   border-radius: 8px;
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 1px 3px rgb(20 20 25 / 8%);
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 1px 2px rgb(20 20 25 / 6%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   white-space: nowrap;
@@ -729,12 +730,14 @@ button:disabled {
 .scene-label__title {
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
   letter-spacing: 0.01em;
 }
 
 .scene-label__detail {
   color: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .scene-label.is-selected {
@@ -753,6 +756,9 @@ button:disabled {
 }
 
 .pulse-tag {
+  /* Live event data stays above the static labels. CSS2DRenderer writes an
+     inline depth-sorted z-index on every frame, hence !important. */
+  z-index: 1000 !important;
   padding: 3px 8px;
   border-radius: 6px;
   background: var(--text);

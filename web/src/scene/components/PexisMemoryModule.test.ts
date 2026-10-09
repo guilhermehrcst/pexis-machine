@@ -21,7 +21,7 @@ describe('Pexis Memory Module', () => {
     expect(component.id).toBe('ram');
     expect(component.kind).toBe('memory');
     expect([...component.parts.keys()]).toEqual([
-      'slot', 'pcb', 'dram-packages', 'contacts', 'chassis', 'routing', 'activity-edge',
+      'slot', 'pcb', 'dram-packages', 'contacts', 'chassis', 'activity-edge',
     ]);
     expect(component.getPart('slot')?.anchor?.name).toBe('anchor.fabric-port');
     expect(component.getPart('pcb')?.anchor?.name).toBe('anchor.memory-carrier');
@@ -30,12 +30,12 @@ describe('Pexis Memory Module', () => {
     expect(component.getPart('chassis')?.anchor?.name).toBe('anchor.memory-chassis');
   });
 
-  it('instantiates repeated visual geometry within an eight-renderable budget', () => {
+  it('instantiates repeated visual geometry within a seven-renderable budget', () => {
     const { component } = buildPexisMemoryModule();
     const objects = renderables(component.root);
-    expect(objects).toHaveLength(8);
+    expect(objects).toHaveLength(7);
     const instanced = objects.filter((object): object is THREE.InstancedMesh => object instanceof THREE.InstancedMesh);
-    expect(instanced.map((mesh) => mesh.count).sort((a, b) => a - b)).toEqual([4, 16, 16, 48]);
+    expect(instanced.map((mesh) => mesh.count).sort((a, b) => a - b)).toEqual([4, 16, 48]);
   });
 
   it('distributes package details over both faces', () => {
@@ -64,7 +64,7 @@ describe('Pexis Memory Module', () => {
     // InstancedMesh.getBoundingBox() encloses the ENTIRE fleet of repeated
     // objects. It must not be used to infer one solid object: e.g. rails at
     // both outer ends have an aggregate AABB spanning the empty middle,
-    // falsely "enclosing" surface routing that is visible between the rails.
+    // falsely "enclosing" detail that is visible between the rails.
     // Inspect every actual primitive instance instead.
     const instances: Array<{ name: string; box: THREE.Box3 }> = [];
     for (const mesh of renderables(component.root)) {

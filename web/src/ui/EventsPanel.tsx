@@ -22,14 +22,14 @@ export function EventsPanel({ lab, width }: { readonly lab: LabReady; readonly w
       title="Last step"
       id="events"
       className="panel--events"
-      meta={<span>{lastStep ? `step ${lastStep.index} · core events` : 'core events'}</span>}
+      meta={<span key={lastStep?.index ?? 'none'}>{lastStep ? `step ${lastStep.index} · core events` : 'core events'}</span>}
     >
       {lastStep === null ? (
         <p className="empty">Press Step to execute one instruction in the C++ core.</p>
       ) : lastStep.events.length === 0 ? (
         <p className="empty">No transition: the machine is stopped.</p>
       ) : (
-        <ol className="events">
+        <ol className="events" translate="no">
           {lastStep.events.map((event, i) => (
             <li key={i} className={`events__item events__item--${event.kind}`}>
               <span className="events__kind">{KIND_LABEL[event.kind]}</span>

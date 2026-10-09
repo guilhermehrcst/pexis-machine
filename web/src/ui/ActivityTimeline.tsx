@@ -40,12 +40,14 @@ export function ActivityTimeline({ lab, width }: { readonly lab: LabReady; reado
         <h2 id="activity-heading" className="panel__title">
           Runtime activity
         </h2>
-        <span className="panel__meta">
+        <span className="panel__meta" key={history.length === 0 ? 'empty' : `${first}-${last}`}>
           {history.length === 0 ? 'no steps yet' : `steps ${first}–${last} · core events only`}
         </span>
       </header>
       <div className="activity__grid" role="img" aria-label={`${history.length} recorded steps of CPU and memory activity`}>
-        <span className="activity__lane">CPU</span>
+        <span className="activity__lane" translate="no">
+          CPU
+        </span>
         {columns.map(({ key, record }) => {
           const mark = record ? cpuMark(record) : null;
           return (
@@ -64,7 +66,9 @@ export function ActivityTimeline({ lab, width }: { readonly lab: LabReady; reado
             {record ? memoryMarks(record).map((m, i) => <span key={i} className={`bar bar--${m}`} />) : null}
           </span>
         ))}
-        <span className="activity__lane activity__lane--planned">GPU</span>
+        <span className="activity__lane activity__lane--planned" translate="no">
+          GPU
+        </span>
         <span className="activity__planned">Planned · M4 — not simulated, no activity</span>
       </div>
     </section>

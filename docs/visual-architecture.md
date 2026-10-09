@@ -157,11 +157,14 @@ Semantic visual structure:
 - routing / inert-surface-detail: memory.surface-routing (16 instances)
 - activity-edge / observation-memory-access: memory.activity-edge
 
+M1E removed the `routing` part (16 inert ticks that read as noise at tablet scale); the module has seven
+renderables and six parts.
+
 These details suggest an industrial cartridge, not simulated DRAM banks or channels. A semantic
 anchor named anchor.fabric-port sits on its mounting edge for a future Pexis Fabric visual
 contract. M1C does not change the existing event-driven CPU/RAM transfer path.
 
-Eight renderables are enforced by a test. Other tests validate part identity, semantic anchors,
+The renderable budget is enforced by a test. Other tests validate part identity, semantic anchors,
 front/back instance placement, visible geometry, and a non-emissive initial activity strip.
 The Compute Module and Memory Module now share a graphite/satin/nickel vocabulary.
 
@@ -200,11 +203,11 @@ Visual part contract:
 
 ```text
 interconnect · fabric
-  ├─ carrier                passive-interposer
-  ├─ frame                  mechanical-frame (four instanced rails)
+  ├─ carrier                passive-interposer (satin since M1E)
+  ├─ frame                  mechanical-frame (four instanced rails: two sides, front, centre divider)
   ├─ active-ports           observed-cpu-memory-endpoints
   ├─ graphics-reserved-port planned-only-endpoint
-  ├─ fabric-mark            identity-only-detail
+  ├─ fabric-mark            identity-only-detail (Pexis 2×2 mark, four instances)
   ├─ ram-lanes              event-backed-cpu-memory-link (three visual lanes)
   └─ gpu-reserved-lanes     planned-not-simulated-link (three dashed paths)
 ```
@@ -224,11 +227,42 @@ palette create a recognizable physical center without suggesting a functioning
 controller. Repeated details use InstancedMesh. Camera framing and selection
 remain driven by the existing 3D scene and accessibility controls.
 
+## M1E: Visual system and scene composition
+
+M1E refines presentation only. No simulator, ABI, event, or telemetry change.
+
+**Surface palette.** `web/src/scene/components/palette.ts` is the closed surface vocabulary of opaque hardware:
+graphite, graphite-soft, satin, rail, silicon, nickel. It holds specs, not shared material instances, so each mesh
+owns its material and `MachineScene.dispose()` remains the single disposal path. `palette.test.ts` fails if an opaque
+hardware part uses an off-palette colour or glows at rest. Pexis blue is never a surface: it marks real activity,
+selection and information. Before M1E, Memory and Fabric used navy-tinted graphite and read as another family.
+
+**Tone mapping.** Khronos PBR Neutral replaces ACES Filmic: authored albedo is kept, the platform stays off-white
+and graphite is not crushed. An environment map (`RoomEnvironment`) was evaluated and not adopted; its gain on satin
+metal was marginal at tablet scale.
+
+**Fabric.** The dark navy carrier was the heaviest flat mass in the scene. The carrier is now satin; observed lanes
+are graphite (the only Fabric surface real events may light); planned routes are partial-opacity graphite dashes; a
+centre divider separates the observed corridor (x < 0) from the planned one (x > 0); the 2×2 Pexis mark is its
+identity. The carrier stops at the compute package, rails stop before any lane crosses them, and endpoint lands sit
+where lanes leave each module. On main the Fabric's back rail was entirely buried in `compute.substrate`; a test now
+checks that no Fabric primitive is buried in the modules it connects.
+
+**Floor.** The camera frames the hardware, not the floor (M1B.1), so a hard-edged slab was cropped differently on
+every viewport and orbit and read as a broken render. The floor and its grid now fade to transparent well before
+their edges and the stage background continues them. No edge is drawn, so none can be cropped. Hardware size on
+screen is unchanged.
+
+**Labels.** Labels declare a side of their anchor; the camera fit reserves room on that side along screen-up. The
+Fabric label hangs below the Fabric's front edge, where it covers neither the lanes entering the compute package nor
+the live transfer tag, which is pinned above the static labels. Titles match the component switcher; details carry
+the Pexis module name.
+
 ## Next gate
 
-After the M1C memory module and M1D Fabric have been independently reviewed and
-merged, continue visual design with the planned graphics placeholder and scene
-composition. The visual layer must not grow GPU execution capabilities or
+With the component family and scene composition consolidated in M1E, the next
+visual step is interaction: semantic selection of parts and inspection modes
+built on the existing part contract, not new hardware. The visual layer must not grow GPU execution capabilities or
 pretend that real fabric timing has been measured. Subsequent work on memory
 hierarchies, timing, and heterogeneous execution belongs in the C++ core's
 own M2/M3/M4 milestones.
